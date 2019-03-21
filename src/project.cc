@@ -46,6 +46,7 @@ limitations under the License.
 #include <limits.h>
 #include <unordered_set>
 #include <vector>
+#include <filesystem>
 
 using namespace clang;
 using namespace llvm;
@@ -97,7 +98,7 @@ struct ProjectProcessor {
 
   bool ExcludesArg(StringRef arg) {
     return exclude_args.count(arg) || any_of(exclude_globs,
-      [&](const GlobPattern &glob) { return glob.match(arg); });
+                  [&](const GlobPattern &glob) { return glob.match(arg); });
   }
 
   // Expand %c %cpp ... in .ccls
@@ -172,12 +173,12 @@ struct ProjectProcessor {
     IgnoringDiagConsumer DiagC;
     IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts(new DiagnosticOptions());
     DiagnosticsEngine Diags(
-      IntrusiveRefCntPtr<DiagnosticIDs>(new DiagnosticIDs()), &*DiagOpts,
-      &DiagC, false);
+        IntrusiveRefCntPtr<DiagnosticIDs>(new DiagnosticIDs()), &*DiagOpts,
+        &DiagC, false);
 
     driver::Driver Driver(args[0], llvm::sys::getDefaultTargetTriple(), Diags);
     auto TargetAndMode =
-      driver::ToolChain::getTargetAndModeFromProgramName(args[0]);
+        driver::ToolChain::getTargetAndModeFromProgramName(args[0]);
     if (!TargetAndMode.TargetPrefix.empty()) {
       const char *arr[] = {"-target", TargetAndMode.TargetPrefix.c_str()};
       args.insert(args.begin() + 1, std::begin(arr), std::end(arr));
@@ -193,7 +194,7 @@ struct ProjectProcessor {
 
     auto CI = std::make_unique<CompilerInvocation>();
     CompilerInvocation::CreateFromArgs(*CI, CCArgs.data(),
-      CCArgs.data() + CCArgs.size(), Diags);
+                                       CCArgs.data() + CCArgs.size(), Diags);
     CI->getFrontendOpts().DisableFree = false;
     CI->getCodeGenOpts().DisableFree = false;
 
@@ -266,24 +267,24 @@ void LoadDirectoryListing(ProjectProcessor &proc, const std::string &root,
   };
 
   GetFilesInFolder(root, true /*recursive*/, true /*add_folder_to_path*/,
-                   [&folder, &files, &Seen](const std::string &path) {
-                     std::pair<LanguageId, bool> lang = lookupExtension(path);
-                     if (lang.first != LanguageId::Unknown && !lang.second) {
-                       if (!Seen.count(path))
-                         files.push_back(path);
-                     } else if (sys::path::filename(path) == ".ccls") {
-                       std::vector<const char *> args = ReadCompilerArgumentsFromFile(path);
-                       folder.dot_ccls.emplace(sys::path::parent_path(path),
-                                               args);
-                       std::string l;
-                       for (size_t i = 0; i < args.size(); i++) {
-                         if (i)
-                           l += ' ';
-                         l += args[i];
-                       }
-                       LOG_S(INFO) << "use " << path << ": " << l;
-                     }
-                   });
+      [&folder, &files, &Seen](const std::string &path) {
+        std::pair<LanguageId, bool> lang = lookupExtension(path);
+        if (lang.first != LanguageId::Unknown && !lang.second) {
+          if (!Seen.count(path))
+            files.push_back(path);
+        } else if (sys::path::filename(path) == ".ccls") {
+          std::vector<const char *> args = ReadCompilerArgumentsFromFile(path);
+          folder.dot_ccls.emplace(sys::path::parent_path(path),
+			  args);
+          std::string l;
+          for (size_t i = 0; i < args.size(); i++) {
+            if (i)
+              l += ' ';
+            l += args[i];
+          }
+          LOG_S(INFO) << "use " << path << ": " << l;
+        }
+      });
 
   // If the first line of .ccls is %compile_commands.json, append extra flags.
   for (auto &e : folder.entries)
@@ -332,8 +333,12 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
   folder.entries.clear();
   if (g_config->compilationDatabaseCommand.empty()) {
     CDBDir = root;
-    if (g_config->compilationDatabaseDirectory.size())
-      sys::path::append(CDBDir, g_config->compilationDatabaseDirectory);
+    if (g_config->compilationDatabaseDirectory.size()) {
+      if (std::filesystem::path(g_config->compilationDatabaseDirectory).is_relative())
+        sys::path::append(CDBDir, g_config->compilationDatabaseDirectory);
+      else 
+		CDBDir = g_config->compilationDatabaseDirectory;
+    }
     sys::path::append(Path, CDBDir, "compile_commands.json");
   } else {
     // If `compilationDatabaseCommand` is specified, execute it to get the
@@ -580,7 +585,7 @@ void Project::Index(WorkingFiles *wfiles, RequestId id) {
                           false, id);
         } else {
           LOG_V(1) << "[" << i << "/" << folder.entries.size() << "]: " << reason
-                   << "; skip " << entry.filename;
+			  << "; skip " << entry.filename;
         }
         i++;
       }
