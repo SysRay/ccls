@@ -414,6 +414,9 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       std::vector<std::string> args = std::move(Cmd.CommandLine);
       entry.args.reserve(args.size());
       for (std::string &arg : args) {
+        if (arg.compare("-I") != 0 && arg.compare("-D") != 0)
+          continue;
+
         DoPathMapping(arg);
         if (!proc.ExcludesArg(arg))
           entry.args.push_back(Intern(arg));

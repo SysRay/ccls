@@ -35,7 +35,7 @@ struct Matcher {
   std::string pattern;
 
   Matcher(const std::string &pattern); // throw
-  Matcher(Matcher&&) = default;
+  Matcher(Matcher &&) = default;
   ~Matcher();
   bool Matches(const std::string &text) const;
 };
@@ -95,7 +95,7 @@ inline void hash_combine(std::size_t &seed, const T &v, Rest... rest) {
   template <> struct hash<type> {                                              \
     std::size_t operator()(const type &t) const {                              \
       std::size_t ret = 0;                                                     \
-      ccls::hash_combine(ret, __VA_ARGS__);                                          \
+      ccls::hash_combine(ret, __VA_ARGS__);                                    \
       return ret;                                                              \
     }                                                                          \
   };                                                                           \
@@ -144,7 +144,6 @@ public:
 template <typename T> struct Vec {
   std::unique_ptr<T[]> a;
   int s = 0;
-#if !(__clang__ || __GNUC__ > 7 || __GNUC__ == 7 && __GNUC_MINOR__ >= 4)
   // Work around a bug in GCC<7.4 that optional<IndexUpdate> would not be
   // construtible.
   Vec() = default;
@@ -154,7 +153,7 @@ template <typename T> struct Vec {
   Vec(Vec &&) = default;
   Vec &operator=(Vec &&) = default;
   Vec(std::unique_ptr<T[]> a, int s) : a(std::move(a)), s(s) {}
-#endif
+
   const T *begin() const { return a.get(); }
   T *begin() { return a.get(); }
   const T *end() const { return a.get() + s; }
