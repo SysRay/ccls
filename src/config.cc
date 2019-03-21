@@ -24,7 +24,6 @@ void DoPathMapping(std::string &arg) {
     if (colon != std::string::npos) {
       if (colon != std::string::npos) {
         auto p = arg.find(mapping.substr(0, colon));
-        auto p = arg.find(mapping.substr(0, colon));
         if (p != std::string::npos)
           if (p != std::string::npos)
             arg.replace(p, colon, mapping.substr(colon + 1));
