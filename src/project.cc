@@ -337,7 +337,7 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       if (std::filesystem::path(g_config->compilationDatabaseDirectory).is_relative())
         sys::path::append(CDBDir, g_config->compilationDatabaseDirectory);
       else 
-		CDBDir = g_config->compilationDatabaseDirectory;
+		    CDBDir = g_config->compilationDatabaseDirectory;
     }
     sys::path::append(Path, CDBDir, "compile_commands.json");
   } else {
@@ -419,13 +419,17 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       std::vector<std::string> args = std::move(Cmd.CommandLine);
       entry.args.reserve(args.size());
       for (std::string &arg : args) {
-        if (arg.compare("-I") != 0 && arg.compare("-D") != 0)
+        if (arg.compare(0,2,"-I") != 0 && arg.compare(0,2,"-D") != 0)
           continue;
 
-        DoPathMapping(arg);
+        if (arg.compare(0,2,"-I") == 0) {
+          DoPathMapping(arg);
+          //arg = "-I" + RealPath(arg.substr(2)); // Todo: test if needed
+        }
         if (!proc.ExcludesArg(arg))
           entry.args.push_back(Intern(arg));
       }
+      entry.args.push_back(Intern(entry.filename));
       entry.compdb_size = entry.args.size();
 
       // Work around relative --sysroot= as it isn't affected by
