@@ -146,7 +146,27 @@ std::string ResolveIfRelative(const std::string &directory,
 std::string RealPath(const std::string &path) {
   SmallString<256> buf;
   sys::fs::real_path(path, buf);
-  return llvm::sys::path::convert_to_slash(buf);
+
+  if (buf.startswith("UNC")) {
+    std::string temp;
+    temp.reserve(path.size());
+    // Get First Folder
+    auto folderIteratorBegin = llvm::sys::path::begin(path);
+    temp += *folderIteratorBegin;
+    if (++folderIteratorBegin != llvm::sys::path::end(path)) {
+      temp += *folderIteratorBegin;
+      if (*folderIteratorBegin == "/") {
+        ++folderIteratorBegin;
+        if (folderIteratorBegin != llvm::sys::path::end(path)) {
+          temp = llvm::sys::path::convert_to_slash(temp +
+                 buf.str().substr(buf.str().find(*folderIteratorBegin)).str());
+          return temp;
+        }
+      }
+    }
+  }
+
+  return llvm::sys::path::convert_to_slash(path);
 }
 
 bool NormalizeFolder(std::string &path) {

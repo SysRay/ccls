@@ -26,12 +26,7 @@ using namespace clang;
 
 namespace ccls {
 std::string PathFromFileEntry(const FileEntry &file) {
-  StringRef Name = file.tryGetRealPathName();
-  if (Name.empty())
-    Name = file.getName();
-  std::string ret = NormalizePath(Name);
-  // Resolve symlinks outside of workspace folders, e.g. /usr/include/c++/7.3.0
-  return NormalizeFolder(ret) ? ret : RealPath(ret);
+  return RealPath(file.getName().str());
 }
 
 static Pos Decomposed2LineAndCol(const SourceManager &SM,

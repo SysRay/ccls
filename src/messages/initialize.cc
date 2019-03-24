@@ -341,11 +341,13 @@ void Initialize(MessageHandler *m, InitializeParam &param, ReplyOnce &reply) {
   for (const WorkspaceFolder &wf : param.workspaceFolders) {
     std::string path = wf.uri.GetPath();
     EnsureEndsInSlash(path);
-    std::string real = RealPath(path) + '/';
+    std::string real = RealPath(path);
+    EnsureEndsInSlash(real);
     workspaceFolders.emplace_back(path, path == real ? "" : real);
   }
   if (workspaceFolders.empty()) {
-    std::string real = RealPath(project_path) + '/';
+    std::string real = RealPath(project_path);
+    EnsureEndsInSlash(real);
     workspaceFolders.emplace_back(project_path,
                                   project_path == real ? "" : real);
   }

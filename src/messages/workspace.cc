@@ -97,7 +97,8 @@ void MessageHandler::workspace_didChangeWorkspaceFolders(
   for (const WorkspaceFolder &wf : param.event.added) {
     std::string folder = wf.uri.GetPath();
     EnsureEndsInSlash(folder);
-    std::string real = RealPath(folder) + '/';
+    std::string real = RealPath(folder);
+    EnsureEndsInSlash(real);
     if (folder == real)
       real.clear();
     LOG_S(INFO) << "add workspace folder " << wf.name << ": "
