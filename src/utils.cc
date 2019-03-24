@@ -145,28 +145,20 @@ std::string ResolveIfRelative(const std::string &directory,
 
 std::string RealPath(const std::string &path) {
   SmallString<256> buf;
-  sys::fs::real_path(path, buf);
+  sys::fs::real_path(path, buf,true);
 
   if (buf.startswith("UNC")) {
-    std::string temp;
-    temp.reserve(path.size());
-    // Get First Folder
-    auto folderIteratorBegin = llvm::sys::path::begin(path);
-    temp += *folderIteratorBegin;
-    if (++folderIteratorBegin != llvm::sys::path::end(path)) {
-      temp += *folderIteratorBegin;
-      if (*folderIteratorBegin == "/") {
-        ++folderIteratorBegin;
-        if (folderIteratorBegin != llvm::sys::path::end(path)) {
-          temp = llvm::sys::path::convert_to_slash(temp +
-                 buf.str().substr(buf.str().find(*folderIteratorBegin)).str());
-          return temp;
-        }
+    auto folderIteratorBegin = llvm::sys::path::begin(path); // 'X:'
+    std::string drive = folderIteratorBegin->str() + '/';
+    if (++folderIteratorBegin != llvm::sys::path::end(path)) { // '/'  (comparsion might be unnecessary)
+      if (++folderIteratorBegin != llvm::sys::path::end(path)) { // 'test'
+        std::string const uncPath = buf.str();
+        return llvm::sys::path::convert_to_slash(
+            drive + uncPath.substr(uncPath.find(*folderIteratorBegin)));
       }
     }
   }
-
-  return llvm::sys::path::convert_to_slash(path);
+  return llvm::sys::path::convert_to_slash(buf);
 }
 
 bool NormalizeFolder(std::string &path) {
