@@ -79,8 +79,8 @@ struct DocumentUri {
 
   void SetPath(const std::string &path);
   std::string GetPath() const;
-
-  std::string raw_uri;
+  
+  mutable std::string raw_uri;
 };
 
 struct Position {

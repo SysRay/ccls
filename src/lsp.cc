@@ -63,7 +63,7 @@ DocumentUri DocumentUri::FromPath(const std::string &path) {
 void DocumentUri::SetPath(const std::string &path) {
   // file:///c%3A/Users/jacob/Desktop/superindex/indexer/full_tests
   raw_uri = path;
-
+  
   size_t index = raw_uri.find(":");
   if (index == 1) { // widows drive letters must always be 1 char
     raw_uri.replace(raw_uri.begin() + index, raw_uri.begin() + index + 1,
@@ -102,11 +102,15 @@ void DocumentUri::SetPath(const std::string &path) {
 }
 
 std::string DocumentUri::GetPath() const {
+  if (!raw_uri.compare(0, 11, "perforce://")) {
+    raw_uri = std::string("file:///") + raw_uri.substr(17, raw_uri.size() - 20);
+  }
+
   if (raw_uri.compare(0, 7, "file://")) {
-    LOG_S(WARNING)
-        << "Received potentially bad URI (not starting with file://): "
-        << raw_uri;
-    return raw_uri;
+		LOG_S(WARNING)
+			<< "Received potentially bad URI (not starting with file://): "
+			<< raw_uri;
+		return raw_uri;
   }
   std::string ret;
 #ifdef _WIN32
