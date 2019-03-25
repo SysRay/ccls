@@ -148,15 +148,12 @@ std::string RealPath(const std::string &path) {
   sys::fs::real_path(path, buf,true);
 
   if (buf.startswith("UNC")) {
-    auto folderIteratorBegin = llvm::sys::path::begin(path); // 'X:'
-    std::string drive = folderIteratorBegin->str() + '/';
-    if (++folderIteratorBegin != llvm::sys::path::end(path)) { // '/'  (comparsion might be unnecessary)
-      if (++folderIteratorBegin != llvm::sys::path::end(path)) { // 'test'
-        std::string const uncPath = buf.str();
-        return llvm::sys::path::convert_to_slash(
-            drive + uncPath.substr(uncPath.find(*folderIteratorBegin)));
-      }
-    }
+    std::string ret = llvm::sys::path::convert_to_slash(path);
+	std::string const drive = ret.substr(0,2);
+    std::string const uncPath = llvm::sys::path::convert_to_slash(buf);
+
+    return drive +
+           uncPath.substr(uncPath.find(ret.substr(2, ret.find('/', 3) - 1)));
   }
   return llvm::sys::path::convert_to_slash(buf);
 }
