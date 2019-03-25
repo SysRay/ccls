@@ -108,8 +108,8 @@ void MessageHandler::textDocument_documentLink(TextDocumentParam &param,
 namespace {
 struct DocumentSymbolParam : TextDocumentParam {
   // Include sym if `!(sym.role & excludeRole)`.
-  Role excludeRole =
-      Role((int)Role::All - (int)Role::Definition - (int)Role::Declaration);
+  Role excludeRole = Role((int)Role::All - (int)Role::Definition -
+                          (int)Role::Declaration - (int)Role::Dynamic);
   // If >= 0, return Range[] instead of SymbolInformation[] to reduce output.
   int startLine = -1;
   int endLine = -1;
