@@ -622,13 +622,7 @@ public:
     auto [it, inserted] = db->uid2lid_and_path.try_emplace(FE.getUniqueID());
     if (inserted) {
       it->second.first = db->uid2lid_and_path.size() - 1;
-      SmallString<256> Path = ccls::RealPath(FE.getName().str());
-      if (Path.empty())
-        Path = FE.getName();
-      if (!llvm::sys::path::is_absolute(Path) &&
-          !SM.getFileManager().makeAbsolutePath(Path))
-        return -1;
-      it->second.second = llvm::sys::path::convert_to_slash(Path.str());
+      it->second.second = ccls::RealPath(FE.getName().str());
     }
     return it->second.first;
   }
