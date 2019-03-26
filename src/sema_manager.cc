@@ -230,8 +230,8 @@ class StoreDiags : public DiagnosticConsumer {
   }
 public:
   StoreDiags(std::string path) : path(path) {}
-  std::vector<Diag> Take() {
-    return std::move(output);
+  std::vector<Diag> Take() { 
+    return std::move(output); 
   }
   bool IsConcerned(const SourceManager &SM, SourceLocation L) {
     FileID FID = SM.getFileID(L);
@@ -245,8 +245,8 @@ public:
   void BeginSourceFile(const LangOptions &Opts, const Preprocessor *) override {
     LangOpts = &Opts;
   }
-  void EndSourceFile() override {
-    Flush();
+  void EndSourceFile() override { 
+    Flush(); 
   }
   void HandleDiagnostic(DiagnosticsEngine::Level Level,
                         const clang::Diagnostic &Info) override {
@@ -296,14 +296,16 @@ public:
   }
 };
 
-std::unique_ptr<CompilerInstance> BuildCompilerInstance(
-    Session &session, std::unique_ptr<CompilerInvocation> CI,
-    IntrusiveRefCntPtr<llvm::vfs::FileSystem> FS, DiagnosticConsumer &DC,
-    const PreambleData *preamble, const std::string &main,
-    std::unique_ptr<llvm::MemoryBuffer> &Buf) {
-  if (preamble)
+std::unique_ptr<CompilerInstance>
+BuildCompilerInstance(Session &session, std::unique_ptr<CompilerInvocation> CI,
+                      IntrusiveRefCntPtr<llvm::vfs::FileSystem> FS,
+                      DiagnosticConsumer &DC, const PreambleData *preamble,
+                      const std::string &main,
+                      std::unique_ptr<llvm::MemoryBuffer> &Buf) {
+  if (preamble) {
+    LOG_S(INFO) << "ov: " << main;
     preamble->Preamble.OverridePreamble(*CI, FS, Buf.get());
-  else
+  } else
     CI->getPreprocessorOpts().addRemappedFile(main, Buf.get());
 
   auto Clang = std::make_unique<CompilerInstance>(session.PCH);
@@ -346,7 +348,12 @@ void BuildPreamble(Session &session, CompilerInvocation &CI,
   std::string content = session.wfiles->GetContent(task.path);
   std::unique_ptr<llvm::MemoryBuffer> Buf =
       llvm::MemoryBuffer::getMemBuffer(content);
+
+  
   auto Bounds = ComputePreambleBounds(*CI.getLangOpts(), Buf.get(), 0);
+
+LOG_S(INFO) << "pre: " << task.path;
+
   if (!task.from_diag && OldP &&
       OldP->Preamble.CanReuse(CI, Buf.get(), Bounds, FS.get()))
     return;
@@ -362,13 +369,17 @@ void BuildPreamble(Session &session, CompilerInvocation &CI,
   StoreDiags DC(task.path);
   IntrusiveRefCntPtr<DiagnosticsEngine> DE =
       CompilerInstance::createDiagnostics(&CI.getDiagnosticOpts(), &DC, false);
+  LOG_S(INFO) << "pre2: " << task.path << "   " << !OldP;
   if (OldP) {
     std::lock_guard lock(session.wfiles->mutex);
-    for (auto &include : OldP->includes)
-      if (WorkingFile *wf = session.wfiles->GetFileUnlocked(include.first))
+    for (auto &include : OldP->includes) {
+ if (WorkingFile *wf = session.wfiles->GetFileUnlocked(include.first))
         CI.getPreprocessorOpts().addRemappedFile(
             include.first,
             llvm::MemoryBuffer::getMemBufferCopy(wf->buffer_content).release());
+    }
+
+     
   }
 
   CclsPreambleCallbacks PC;
@@ -433,6 +444,7 @@ void *PreambleMain(void *manager_) {
 void *CompletionMain(void *manager_) {
   auto *manager = static_cast<SemaManager *>(manager_);
   set_thread_name("comp");
+
   while (true) {
     std::unique_ptr<SemaManager::CompTask> task = manager->comp_tasks.Dequeue();
     if (pipeline::quit.load(std::memory_order_relaxed))
@@ -451,12 +463,14 @@ void *CompletionMain(void *manager_) {
 
     std::shared_ptr<Session> session = manager->EnsureSession(task->path);
     std::shared_ptr<PreambleData> preamble = session->GetPreamble();
+
     IntrusiveRefCntPtr<llvm::vfs::FileSystem> FS =
         preamble ? preamble->stat_cache->Consumer(session->FS) : session->FS;
     std::unique_ptr<CompilerInvocation> CI =
         BuildCompilerInvocation(task->path, session->file.args, FS);
     if (!CI)
       continue;
+    
     auto &FOpts = CI->getFrontendOpts();
     FOpts.CodeCompleteOpts = task->CCOpts;
     FOpts.CodeCompletionAt.FileName = task->path;
@@ -467,7 +481,22 @@ void *CompletionMain(void *manager_) {
 
     DiagnosticConsumer DC;
     std::string content = manager->wfiles->GetContent(task->path);
+   
     auto Buf = llvm::MemoryBuffer::getMemBuffer(content);
+    /*
+    session->openFiles.clear();
+    for (auto &file : session->wfiles->files) {
+      if (file.first != task->path) {
+        LOG_S(INFO) << "tg: " << file.first << " "
+                    << session->wfiles->GetContent(file.first).size();
+        auto tempBuf = llvm::MemoryBuffer::getMemBuffer(
+            session->wfiles->GetContent(file.first));
+        CI->getPreprocessorOpts().addRemappedFile(file.first, tempBuf.get());
+
+        session->openFiles.push_back(std::move(tempBuf));
+      }
+    }
+    */
     PreambleBounds Bounds =
         ComputePreambleBounds(*CI->getLangOpts(), Buf.get(), 0);
     bool in_preamble =
@@ -484,6 +513,8 @@ void *CompletionMain(void *manager_) {
                                        preamble.get(), task->path, Buf);
     if (!Clang)
       continue;
+
+
 
     Clang->getPreprocessorOpts().SingleFileParseMode = in_preamble;
     Clang->setCodeCompletionConsumer(task->Consumer.release());
@@ -682,15 +713,15 @@ void SemaManager::ScheduleDiag(const std::string &path, int debounce) {
   if (!match.Matches(path))
     return;
   int64_t now = chrono::duration_cast<chrono::milliseconds>(
-    chrono::high_resolution_clock::now().time_since_epoch())
-    .count();
+                    chrono::high_resolution_clock::now().time_since_epoch())
+                    .count();
   bool flag = false;
   {
     std::lock_guard lock(diag_mutex);
     int64_t &next = next_diag[path];
     auto &d = g_config->diagnostics;
     if (next <= now ||
-      now - next > std::max(d.onChange, std::max(d.onChange, d.onSave))) {
+        now - next > std::max(d.onChange, std::max(d.onChange, d.onSave))) {
       next = now + debounce;
       flag = true;
     }
@@ -701,8 +732,19 @@ void SemaManager::ScheduleDiag(const std::string &path, int debounce) {
 
 void SemaManager::OnView(const std::string &path) {
   std::lock_guard lock(mutex);
-  if (!sessions.Get(path))
+  static std::string lastPath = path;
+
+  if (!sessions.Get(path)) {
+    lastPath = path;
     preamble_tasks.PushBack(PreambleTask{path}, true);
+  } else if (lastPath != path) {
+    lastPath = path;
+    LOG_S(INFO) << "OnView!";
+    PreambleTask temp{path};
+    temp.from_diag = true;
+    preamble_tasks.PushBack(std::move(temp), true);
+  }
+   
 }
 
 void SemaManager::OnSave(const std::string &path) {
@@ -731,6 +773,8 @@ SemaManager::EnsureSession(const std::string &path, bool *created) {
     sessions.Insert(path, session);
     if (created)
       *created = true;
+
+     preamble_tasks.PushBack(PreambleTask{path}, true);
   }
   return session;
 }

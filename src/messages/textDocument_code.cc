@@ -16,6 +16,7 @@ limitations under the License.
 #include "message_handler.hh"
 #include "pipeline.hh"
 #include "query.hh"
+#include "sema_manager.hh"
 
 #include <llvm/Support/FormatVariadic.h>
 
@@ -23,7 +24,7 @@ limitations under the License.
 #include <rapidjson/writer.h>
 
 #include <unordered_set>
-
+#include "log.hh"
 namespace ccls {
 namespace {
 struct CodeAction {
@@ -38,6 +39,8 @@ void MessageHandler::textDocument_codeAction(CodeActionParam &param,
   WorkingFile *wf = FindOrFail(param.textDocument.uri.GetPath(), reply).second;
   if (!wf)
     return;
+
+  manager->OnView(wf->filename);
   std::vector<CodeAction> result;
   std::vector<Diagnostic> diagnostics;
   wfiles->WithLock([&]() { diagnostics = wf->diagnostics; });
