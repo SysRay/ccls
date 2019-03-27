@@ -320,8 +320,20 @@ bool Indexer_Parse(SemaManager *completion, WorkingFiles *wfiles,
         on_indexed->PushBack(std::move(update),
           request.mode != IndexMode::NonInteractive);
         if (entry.id >= 0) {
-          std::lock_guard lock2(project->mtx);
-          project->root2folder[entry.root].path2entry_index[path] = entry.id;
+          int const lastIndex = project->root2folder[entry.root].path2entry_index[path];
+
+          if (lastIndex > 0) {
+			int score = ComputeGuessScore(path, entry.filename);
+            int score2 = ComputeGuessScore(path, project->root2folder[entry.root].entries[lastIndex].filename);
+                       
+			if (score > score2) {
+              std::lock_guard lock2(project->mtx);
+              project->root2folder[entry.root].path2entry_index[path] =entry.id;
+            }
+          } else {
+            std::lock_guard lock2(project->mtx);
+            project->root2folder[entry.root].path2entry_index[path] = entry.id;
+          } 
         }
       }
       return true;
@@ -411,8 +423,20 @@ bool Indexer_Parse(SemaManager *completion, WorkingFiles *wfiles,
       if (entry.id >= 0) {
         std::lock_guard lock(project->mtx);
         auto &folder = project->root2folder[entry.root];
-        for (auto &dep : curr->dependencies)
-          folder.path2entry_index[dep.first.val().str()] = entry.id;
+        for (auto &dep : curr->dependencies) {
+          int const lastIndex = folder.path2entry_index[dep.first.val().str()];
+
+          if (lastIndex > 0) {
+            int score = ComputeGuessScore(dep.first.val().str(),entry.filename);
+            int score2 = ComputeGuessScore(dep.first.val().str(), folder.entries[lastIndex].filename);
+
+            if (score > score2) {
+              folder.path2entry_index[dep.first.val().str()] = entry.id;
+            }
+          } else {
+            folder.path2entry_index[dep.first.val().str()] = entry.id;
+          }
+        }
       }
     }
   }

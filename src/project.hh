@@ -29,6 +29,8 @@ struct WorkingFiles;
 
 std::pair<LanguageId, bool> lookupExtension(std::string_view filename);
 
+int ComputeGuessScore(std::string_view a, std::string_view b);
+
 struct Project {
   struct Entry {
     std::string root;

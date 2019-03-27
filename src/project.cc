@@ -309,6 +309,7 @@ void LoadDirectoryListing(ProjectProcessor &proc, const std::string &root,
       folder.entries.push_back(e);
     }
 }
+} // namespace
 
 // Computes a score based on how well |a| and |b| match. This is used for
 // argument guessing.
@@ -324,8 +325,6 @@ int ComputeGuessScore(std::string_view a, std::string_view b) {
                     std::count(b.begin() + i, b.end() - j, '/'));
   return score;
 }
-
-} // namespace
 
 void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
   SmallString<256> CDBDir, Path, StdinPath;
