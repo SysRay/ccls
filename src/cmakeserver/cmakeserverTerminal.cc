@@ -1,6 +1,7 @@
 #include "ICMakeServerTerminal.hh"
 #include "config.hh"
 #include "log.hh"
+
 #include <atlstr.h>  // windows
 #include <windows.h> // windows
 #include <string>
@@ -18,7 +19,12 @@ public:
   bool write_blocking(std::string const &) final;
   bool write_blocking(std::string &&) final;
   bool restart() final;
-  void deinit() final { m_isValid = false; }
+  void deinit() final { 
+    m_isValid = false; 
+    CHAR chBuf[1]{0};
+    DWORD  written;
+    WriteFile(wPipeOutput, &chBuf[0], 1, &written, NULL);
+  }
   bool init(std::string const &path);
 
   ~consoleProcess() {
@@ -34,7 +40,7 @@ public:
 std::string consoleProcess::read_blocking() {
   std::string retData;
 
-  DWORD dwRead, dwWritten;
+  DWORD dwRead;
   CHAR chBuf[1024];
   BOOL bSuccess = FALSE;
   HANDLE hParentStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -68,7 +74,7 @@ bool consoleProcess::init(std::string const &path) {
     ZeroMemory(&secattr, sizeof(secattr));
     secattr.nLength = sizeof(secattr);
     secattr.bInheritHandle = TRUE;
-
+    
     CreatePipe(&wPipeInput, &wPipeOutput, &secattr, 0);
     CreatePipe(&rPipeOutput, &rPipeInput, &secattr, 0);
     //-

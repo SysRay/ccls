@@ -6,6 +6,7 @@
 #include <libssh/libssh.h>
 #include <array>
 #include <atomic>
+
 class ssh2Process
   : public ICMakeServerTerminal
 {

@@ -37,6 +37,7 @@ limitations under the License.
 #include <llvm/Support/Program.h>
 
 #include <rapidjson/writer.h>
+#include <rapidjson/document.h>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -45,10 +46,10 @@ limitations under the License.
 #endif
 
 #include <array>
+#include <filesystem>
 #include <limits.h>
 #include <unordered_set>
 #include <vector>
-#include <filesystem>
 
 using namespace clang;
 using namespace llvm;
@@ -99,8 +100,8 @@ struct ProjectProcessor {
   }
 
   bool ExcludesArg(StringRef arg) {
-	  return exclude_args.count(arg) || any_of(exclude_globs, 
-	  [&](const GlobPattern &glob) { return glob.match(arg); });
+    return exclude_args.count(arg) || any_of(exclude_globs,
+    [&](const GlobPattern &glob) { return glob.match(arg); });
   }
 
   // Expand %c %cpp ... in .ccls
@@ -276,8 +277,7 @@ void LoadDirectoryListing(ProjectProcessor &proc, const std::string &root,
             files.push_back(path);
         } else if (sys::path::filename(path) == ".ccls") {
           std::vector<const char *> args = ReadCompilerArgumentsFromFile(path);
-          folder.dot_ccls.emplace(sys::path::parent_path(path),
-			  args);
+          folder.dot_ccls.emplace(sys::path::parent_path(path), args);
           std::string l;
           for (size_t i = 0; i < args.size(); i++) {
             if (i)
@@ -327,7 +327,63 @@ int ComputeGuessScore(std::string_view a, std::string_view b) {
                     std::count(b.begin() + i, b.end() - j, '/'));
   return score;
 }
+struct CMakeServerConfig {
+  std::string cmakePath;
+  bool runCmakeLocal;
+  std::string cmakeHomeDir;
+  std::string cmakeBuildDir;
+  std::string user;
+  std::string server;
+};
 
+static CMakeServerConfig getCMakeServerConfig(std::string_view configData){
+  CMakeServerConfig ret;
+  rapidjson::Document document;
+  document.Parse(configData.data());
+
+  if (document.FindMember("cmakePath") != document.MemberEnd()) {
+    ret.cmakePath = document["cmakePath"].GetString();
+  } else {
+    LOG_S(ERROR) << "cmakePath not set in .cmakeServerConfig!";
+    return {};
+  }
+
+  if (document.FindMember("runCmakeLocal") != document.MemberEnd()) {
+    ret.runCmakeLocal = document["runCmakeLocal"].GetBool();
+
+    if (!ret.runCmakeLocal) {
+      if (document.FindMember("username") != document.MemberEnd()) {
+        ret.user = document["username"].GetString();
+      } else {
+        LOG_S(ERROR) << "username not set in .cmakeServerConfig!";
+        return {};
+      }
+      if (document.FindMember("remoteName") != document.MemberEnd()) {
+        ret.server = document["remoteName"].GetString();
+      } else {
+        LOG_S(ERROR) << "remoteName not set in .cmakeServerConfig!";
+        return {};
+      }
+    }
+  }
+
+  if (document.FindMember("cmakeHomeDir") != document.MemberEnd()) {
+    ret.cmakeHomeDir = document["cmakeHomeDir"].GetString();
+  } else {
+    LOG_S(ERROR) << "cmakeHomeDir not set in .cmakeServerConfig!";
+    return {};
+  }
+
+  if (document.FindMember("cmakeBuildDir") != document.MemberEnd()) {
+    ret.cmakeBuildDir = document["cmakeBuildDir"].GetString();
+  } else {
+    LOG_S(ERROR) << "cmakeBuildDir not set in .cmakeServerConfig!";
+    return {};
+  }
+
+  return ret;
+}
+  
 void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
   SmallString<256> CDBDir, Path, StdinPath;
   std::string err_msg;
@@ -379,15 +435,27 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
     }
   }
 
-   std::unique_ptr<tooling::CompilationDatabase> CDB =
-	   tooling::CompilationDatabase::loadFromDirectory(CDBDir, err_msg);
-  
-  //auto terminal = createRemoteCMakeServerTerminal(...);
-	  
-  
-  //std::unique_ptr<tooling::CompilationDatabase> CDB = createCMakeServer(..., std::move(terminal));
+  std::unique_ptr<tooling::CompilationDatabase> CDB;
      
-  
+  auto file = ccls::ReadContent(".vscode/CMakeServerConfig.json");
+  if (file) {
+    auto settings = getCMakeServerConfig(*file);
+    if (settings.cmakeBuildDir.empty())
+      return;
+
+    std::unique_ptr<ICMakeServerTerminal> terminal;
+    
+    if (settings.runCmakeLocal)
+      terminal = createLocalCMakeServerTerminal(settings.cmakePath);
+    else
+       terminal = createRemoteCMakeServerTerminal(
+          settings.cmakePath, settings.server, settings.user, "", 22);
+
+    CDB = createCMakeServer(".vscode/CMakeServerCache.json",settings.cmakeBuildDir,settings.cmakeHomeDir, std::move(terminal));
+  } else {
+    CDB = tooling::CompilationDatabase::loadFromDirectory(CDBDir, err_msg);
+  }
+
   if (!g_config->compilationDatabaseCommand.empty()) {
 #ifdef _WIN32
     DeleteFileA(StdinPath.c_str());
@@ -600,8 +668,8 @@ void Project::Index(WorkingFiles *wfiles, RequestId id) {
                                       : IndexMode::NonInteractive,
                           false, id);
         } else {
-          LOG_V(1) << "[" << i << "/" << folder.entries.size() << "]: " << reason
-			  << "; skip " << entry.filename;
+          LOG_V(1) << "[" << i << "/" << folder.entries.size()
+                   << "]: " << reason << "; skip " << entry.filename;
         }
         i++;
       }

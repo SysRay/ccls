@@ -1,11 +1,11 @@
 #include "ICMakeserver.hh"
 
-#include "ICMakeserver.hh"
 #include "config.hh"
 #include "log.hh"
 #include "platform.hh"
-#include "rapidjson/document.h"
 #include "utils.hh"
+
+#include <rapidjson/document.h>
 #include <clang/Tooling/CompilationDatabase.h>
 #include <condition_variable>
 #include <filesystem>
@@ -62,15 +62,24 @@ public:
 
     std::lock_guard<std::mutex> lock(m_mtxInterface);
 
-    m_isRunning = true;
-    m_worker = std::make_unique<std::thread>([this] { workerFunction(); });
+    if (!m_terminal) {
+      m_files = extractCacheCMakeServer(m_pathCache);
+      m_isExtracted = true;
+      m_cond.notify_all();
+    } else {
+      m_isRunning = true;
+      m_worker = std::make_unique<std::thread>([this] { workerFunction(); });
+    }
+    
   }
 
   virtual ~CMakeServer() {
     m_isRunning = false;
-    m_terminal->deinit();
-    m_worker->join();
-    m_terminal.reset();
+    if(m_worker){ 
+      m_terminal->deinit();
+      m_worker->join();
+      m_terminal.reset();
+    }
   }
 
   std::vector<clang::tooling::CompileCommand>
@@ -129,7 +138,7 @@ void CMakeServer::workerFunction() {
     // Parse information
     std::string temp = m_terminal->read_blocking();
     if (temp.empty()) {
-      continue;
+      break;
     }
     readTemp += temp;
 
@@ -368,7 +377,7 @@ std::unordered_map<std::string, clang::tooling::CompileCommand> extractCacheCMak
   auto file = ccls::ReadContent(path);
   if (!file)
     return {};
-
+  LOG_S(INFO) << "[CMakeServer] Reading cached configuration";
   rapidjson::Document document;
   document.Parse(file->data());
   return extract(document);
