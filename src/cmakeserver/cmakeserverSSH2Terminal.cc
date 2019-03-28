@@ -27,7 +27,7 @@ public:
     m_isRunning = false;
   }
 
-  bool init(std::string const &path, std::string const& hostname, std::string const& username, std::string const& password, int const port);
+  bool init(std::string const& sshdir, std::string const &path, std::string const& hostname, std::string const& username, std::string const& password, int const port);
  
   ~ssh2Process() {
     if (m_channel != nullptr) {
@@ -166,14 +166,14 @@ bool verify_knownhost(ssh_session session)
   return true;
 }
 
-bool ssh2Process::init(std::string const &path, std::string const& hostname, std::string const& username, std::string const& password, int const port) {
+bool ssh2Process::init(std::string const& sshdir, std::string const &path, std::string const& hostname, std::string const& username, std::string const& password, int const port) {
   if (m_path.empty()) {
     m_path = path + CMAKE_PARAM_SERVERCALL;
 
     m_session = ssh_new();
     if (m_session == nullptr) return false;
 
-    ssh_options_set(m_session, SSH_OPTIONS_SSH_DIR, "hosts");
+    ssh_options_set(m_session, SSH_OPTIONS_SSH_DIR, sshdir.data());
     ssh_options_set(m_session, SSH_OPTIONS_USER, username.data());
     ssh_options_set(m_session, SSH_OPTIONS_HOST, hostname.data());
     ssh_options_set(m_session, SSH_OPTIONS_PORT, &port);
@@ -195,7 +195,13 @@ bool ssh2Process::init(std::string const &path, std::string const& hostname, std
     }
 
     // Authenticate ourselves
-
+    if (ssh_userauth_publickey_auto(m_session, username.c_str(), password.c_str()) !=SSH_AUTH_SUCCESS) {
+      LOG_S(ERROR) << "Error authenticating! " << ssh_get_error(m_session);
+      ssh_disconnect(m_session);
+      ssh_free(m_session);
+      return false;
+    }
+    /*
     if (ssh_userauth_password(m_session, username.c_str(),password.c_str()) != SSH_AUTH_SUCCESS)
     {
       LOG_S(ERROR) << "Error authenticating! " << ssh_get_error(m_session);
@@ -203,7 +209,7 @@ bool ssh2Process::init(std::string const &path, std::string const& hostname, std
       ssh_free(m_session);
       return false;
     }
-    
+    */
     int rc;
     m_channel = ssh_channel_new(m_session);
     if (m_channel == NULL)
@@ -257,10 +263,13 @@ bool ssh2Process::restart() {
 }
 
 // Factory
-std::unique_ptr<ICMakeServerTerminal> createRemoteCMakeServerTerminal(std::string const &path, std::string const& hostname, std::string const& username, std::string const& password, int const port) {
+std::unique_ptr<ICMakeServerTerminal> createRemoteCMakeServerTerminal(
+    std::string const &sshdir, std::string const &path,
+    std::string const &hostname, std::string const &username,
+    std::string const &password, int const port) {
   auto inst = std::make_unique<ssh2Process>();
 
-  if (inst->init(path, hostname, username, password, port) == true) {
+  if (inst->init(sshdir, path, hostname, username, password, port) == true) {
     return inst;
   }
 

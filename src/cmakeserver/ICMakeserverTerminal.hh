@@ -31,4 +31,7 @@ std::unique_ptr<ICMakeServerTerminal> createLocalCMakeServerTerminal(std::string
   * @param Path to the cmake executable
   * @return nullptr on error
 */
-std::unique_ptr<ICMakeServerTerminal> createRemoteCMakeServerTerminal(std::string const &path, std::string const& hostname, std::string const& username, std::string const& password, int const port);
+std::unique_ptr<ICMakeServerTerminal> createRemoteCMakeServerTerminal(
+    std::string const &sshdir, std::string const &path,
+    std::string const &hostname, std::string const &username,
+    std::string const &password, int const port);
