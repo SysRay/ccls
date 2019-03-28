@@ -85,7 +85,7 @@ bool consoleProcess::init(std::string const &path) {
     si.hStdError = wPipeOutput;
     si.hStdOutput = wPipeOutput;
 
-    std::string temp = path + " -E server --debug --experimental";
+    std::string temp = path + CMAKE_PARAM_SERVERCALL;
     USES_CONVERSION;
     TCHAR *cmd = A2T(&temp[0]);
 

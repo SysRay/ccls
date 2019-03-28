@@ -8,9 +8,10 @@
 
 /**
  * Creates a cmakeServer object
+ * @param Path + filename to use for the cache file
  * @param Path for buildDirectory
  * @param Path for sourceDirectory
- * @param Pass Object to CmakeServer (is handled by cmakeserver)
+ * @param Pass the terminal to cmakeserver
  */
 std::unique_ptr<clang::tooling::CompilationDatabase> createCMakeServer(
     std::string const pathCache, std::string const &buildDirectory,
