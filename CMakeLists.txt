@@ -145,7 +145,14 @@ set_property(SOURCE src/utils.cc APPEND PROPERTY COMPILE_DEFINITIONS
 
 target_include_directories(ccls PRIVATE src)
 target_include_directories(ccls SYSTEM PRIVATE
-  third_party ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
+  third_party ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS}
+  third_party/libssh/win/include
+  )
+target_link_libraries(ccls PRIVATE 
+  ${CMAKE_SOURCE_DIR}/third_party/libssh/win/lib/x64/libssh.lib
+  ${CMAKE_SOURCE_DIR}/third_party/libssh/win/lib/x64/ssh.lib
+  )
+
 
 if(USE_SYSTEM_RAPIDJSON)
   find_package(RapidJSON QUIET)
@@ -159,6 +166,9 @@ target_include_directories(ccls SYSTEM PRIVATE ${RapidJSON_INCLUDE_DIRS})
 
 install(TARGETS ccls RUNTIME DESTINATION bin)
 
+install(FILES 
+${CMAKE_SOURCE_DIR}/third_party/libssh/win/bin/x64/ssh.dll
+DESTINATION bin)
 ### Sources
 
 target_sources(ccls PRIVATE third_party/siphash.cc)
@@ -209,6 +219,13 @@ target_sources(ccls PRIVATE
   src/messages/textDocument_signatureHelp.cc
   src/messages/workspace.cc
 )
+
+target_sources(ccls PRIVATE
+  src/cmakeserver/cmakeserver.cc
+  src/cmakeserver/cmakeserverTerminal.cc
+  src/cmakeserver/cmakeserverSSH2Terminal.cc
+)
+
 
 ### Obtain CCLS version information from Git
 ### This only happens when cmake is re-run!

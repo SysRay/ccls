@@ -16,13 +16,15 @@ limitations under the License.
 #include "project.hh"
 
 #include "clang_tu.hh" // llvm::vfs
+#include "cmakeserver/ICMakeserver.hh"
+#include "cmakeserver/ICMakeserverTerminal.hh"
+
 #include "filesystem.hh"
 #include "log.hh"
 #include "pipeline.hh"
 #include "platform.hh"
 #include "utils.hh"
 #include "working_files.hh"
-
 #include <clang/Driver/Compilation.h>
 #include <clang/Driver/Driver.h>
 #include <clang/Driver/Types.h>
@@ -37,9 +39,9 @@ limitations under the License.
 #include <rapidjson/writer.h>
 
 #ifdef _WIN32
-# include <Windows.h>
+#include <Windows.h>
 #else
-# include <unistd.h>
+#include <unistd.h>
 #endif
 
 #include <array>
@@ -97,8 +99,8 @@ struct ProjectProcessor {
   }
 
   bool ExcludesArg(StringRef arg) {
-    return exclude_args.count(arg) || any_of(exclude_globs,
-                  [&](const GlobPattern &glob) { return glob.match(arg); });
+	  return exclude_args.count(arg) || any_of(exclude_globs, 
+	  [&](const GlobPattern &glob) { return glob.match(arg); });
   }
 
   // Expand %c %cpp ... in .ccls
@@ -335,8 +337,8 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
     if (g_config->compilationDatabaseDirectory.size()) {
       if (std::filesystem::path(g_config->compilationDatabaseDirectory).is_relative())
         sys::path::append(CDBDir, g_config->compilationDatabaseDirectory);
-      else 
-		    CDBDir = g_config->compilationDatabaseDirectory;
+      else
+        CDBDir = g_config->compilationDatabaseDirectory;
     }
     sys::path::append(Path, CDBDir, "compile_commands.json");
   } else {
@@ -377,8 +379,15 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
     }
   }
 
-  std::unique_ptr<tooling::CompilationDatabase> CDB =
-      tooling::CompilationDatabase::loadFromDirectory(CDBDir, err_msg);
+   std::unique_ptr<tooling::CompilationDatabase> CDB =
+	   tooling::CompilationDatabase::loadFromDirectory(CDBDir, err_msg);
+  
+  //auto terminal = createRemoteCMakeServerTerminal(...);
+	  
+  
+  //std::unique_ptr<tooling::CompilationDatabase> CDB = createCMakeServer(..., std::move(terminal));
+     
+  
   if (!g_config->compilationDatabaseCommand.empty()) {
 #ifdef _WIN32
     DeleteFileA(StdinPath.c_str());
@@ -419,12 +428,12 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       std::vector<std::string> args = std::move(Cmd.CommandLine);
       entry.args.reserve(args.size());
       for (std::string &arg : args) {
-        if (arg.compare(0,2,"-I") != 0 && arg.compare(0,2,"-D") != 0)
+        if (arg.compare(0, 2, "-I") != 0 && arg.compare(0, 2, "-D") != 0)
           continue;
 
-        if (arg.compare(0,2,"-I") == 0) {
+        if (arg.compare(0, 2, "-I") == 0) {
           DoPathMapping(arg);
-          //arg = "-I" + RealPath(arg.substr(2)); // Todo: test if needed
+          // arg = "-I" + RealPath(arg.substr(2)); // Todo: test if needed
         }
         if (!proc.ExcludesArg(arg))
           entry.args.push_back(Intern(arg));
