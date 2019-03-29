@@ -505,10 +505,10 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       std::vector<std::string> args = std::move(Cmd.CommandLine);
       entry.args.reserve(args.size());
       for (std::string &arg : args) {
-        if (arg.compare(0, 2, "-I") != 0 && arg.compare(0, 2, "-D") != 0)
+        if (arg.compare(0, 2, "-I") != 0 && arg.compare(0, 2, "-D") && arg.compare(0, 8, "-isystem") != 0)
           continue;
 
-        if (arg.compare(0, 2, "-I") == 0) {
+        if (arg.compare(0, 2, "-I") == 0 || arg.compare(0, 8, "-isystem") == 0) {
           DoPathMapping(arg);
           // arg = "-I" + RealPath(arg.substr(2)); // Todo: test if needed
         }
