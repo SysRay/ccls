@@ -335,6 +335,7 @@ struct CMakeServerConfig {
   std::string user;
   std::string server;
   std::string sshDir;
+  bool _isValid = false;
 };
 
 static CMakeServerConfig getCMakeServerConfig(std::string_view configData){
@@ -388,7 +389,7 @@ static CMakeServerConfig getCMakeServerConfig(std::string_view configData){
     LOG_S(ERROR) << "cmakeBuildDir not set in .cmakeServerConfig!";
     return {};
   }
-
+  ret._isValid = true;
   return ret;
 }
   
@@ -448,7 +449,7 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
   auto file = ccls::ReadContent(".vscode/CMakeServerConfig.json");
   if (file) {
     auto settings = getCMakeServerConfig(*file);
-    if (settings.cmakeBuildDir.empty())
+    if (!settings._isValid)
       return;
 
     std::unique_ptr<ICMakeServerTerminal> terminal;
