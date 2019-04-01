@@ -463,6 +463,10 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
     CDB = createCMakeServer(".vscode/CMakeServerCache.json",settings.cmakeBuildDir,settings.cmakeHomeDir, std::move(terminal));
   } else {
     CDB = tooling::CompilationDatabase::loadFromDirectory(CDBDir, err_msg);
+    if (CDB)
+      LOG_S(INFO) << "loaded " << Path.c_str();
+    else if (g_config->compilationDatabaseCommand.size() || sys::fs::exists(Path))
+      LOG_S(ERROR) << "failed to load " << Path.c_str();
   }
 
   if (!g_config->compilationDatabaseCommand.empty()) {
@@ -480,11 +484,7 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
   ProjectProcessor proc(folder);
   StringSet<> Seen;
   std::vector<Project::Entry> result;
-  if (!CDB) {
-    if (g_config->compilationDatabaseCommand.size() || sys::fs::exists(Path))
-      LOG_S(ERROR) << "failed to load " << Path.c_str();
-  } else {
-    LOG_S(INFO) << "loaded " << Path.c_str();
+  if (CDB) {
     for (tooling::CompileCommand &Cmd : CDB->getAllCompileCommands()) {
       static bool once;
       Project::Entry entry;
