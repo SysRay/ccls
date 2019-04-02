@@ -40,7 +40,6 @@ void MessageHandler::textDocument_codeAction(CodeActionParam &param,
   if (!wf)
     return;
 
-  manager->OnView(wf->filename);
   std::vector<CodeAction> result;
   std::vector<Diagnostic> diagnostics;
   wfiles->WithLock([&]() { diagnostics = wf->diagnostics; });
