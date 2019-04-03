@@ -12,7 +12,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-
 #include "include_complete.hh"
 #include "message_handler.hh"
 #include "pipeline.hh"
@@ -33,6 +32,9 @@ void MessageHandler::textDocument_didChange(TextDocumentDidChangeParam &param) {
 
 void MessageHandler::textDocument_didClose(TextDocumentParam &param) {
   std::string path = param.textDocument.uri.GetPath();
+  if (param.textDocument.uri.isPerforce)
+    return;
+
   wfiles->OnClose(path);
   manager->OnClose(path);
   pipeline::RemoveCache(path);
@@ -40,9 +42,11 @@ void MessageHandler::textDocument_didClose(TextDocumentParam &param) {
 
 void MessageHandler::textDocument_didOpen(DidOpenTextDocumentParam &param) {
   std::string path = param.textDocument.uri.GetPath();
+  if (param.textDocument.uri.isPerforce)
+    return;
+
   WorkingFile *wf = wfiles->OnOpen(param.textDocument);
-  if (std::optional<std::string> cached_file_contents =
-          pipeline::LoadIndexedContent(path))
+  if (std::optional<std::string> cached_file_contents = pipeline::LoadIndexedContent(path))
     wf->SetIndexContent(*cached_file_contents);
 
   QueryFile *file = FindFile(path);
@@ -65,6 +69,9 @@ void MessageHandler::textDocument_didOpen(DidOpenTextDocumentParam &param) {
 }
 
 void MessageHandler::textDocument_didSave(TextDocumentParam &param) {
+  if (param.textDocument.uri.isPerforce)
+    return;
+
   const std::string &path = param.textDocument.uri.GetPath();
   pipeline::Index(path, {}, IndexMode::Normal, false);
   manager->OnSave(path);

@@ -81,6 +81,7 @@ struct DocumentUri {
   std::string GetPath() const;
   
   mutable std::string raw_uri;
+  mutable bool isPerforce = false;
 };
 
 struct Position {

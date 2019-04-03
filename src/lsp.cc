@@ -104,6 +104,7 @@ void DocumentUri::SetPath(const std::string &path) {
 std::string DocumentUri::GetPath() const {
   if (!raw_uri.compare(0, 11, "perforce://")) {
     raw_uri = std::string("file:///") + raw_uri.substr(17, raw_uri.size() - 20);
+    isPerforce = true;
   }
 
   if (raw_uri.compare(0, 7, "file://")) {

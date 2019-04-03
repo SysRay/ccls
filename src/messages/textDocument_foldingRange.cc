@@ -18,6 +18,7 @@ limitations under the License.
 #include "project.hh"
 #include "query.hh"
 #include "working_files.hh"
+#include "sema_manager.hh"
 
 namespace ccls {
 namespace {
@@ -48,5 +49,6 @@ void MessageHandler::textDocument_foldingRange(TextDocumentParam &param,
       fold.endCharacter = ls_range->end.character;
     }
   reply(result);
+  manager->OnView(wf->filename);
 }
 } // namespace ccls
