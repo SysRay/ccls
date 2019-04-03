@@ -99,7 +99,10 @@ bool consoleProcess::init(std::string const &path, std::string const &preCommand
     si.hStdError = wPipeOutput;
     si.hStdOutput = wPipeOutput;
 
-    std::string temp = "cmd.exe /v /c " + preCommand + "&& \"" + path + "\"" + CMAKE_PARAM_SERVERCALL;
+    std::string temp = "cmd.exe /v /c ";
+    if(preCommand.size()) temp += preCommand + "&&";
+    temp += "\"" + path + "\"" + CMAKE_PARAM_SERVERCALL;
+
     LOG_S(INFO) << temp;
     USES_CONVERSION;
     TCHAR *cmd = A2T(&temp[0]);
