@@ -34,7 +34,6 @@ inline std::string const CMAKE_SERVER_COMMAND_HANDSHAKE(int const versionMajor, 
 
 // Helper function to get length of strings without \0
 template<typename T, int sz>
-int size(T(&)[sz])
-{
+int size(T(&)[sz]){
   return sz - 1;
 }

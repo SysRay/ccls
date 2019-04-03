@@ -1,3 +1,7 @@
+/// @file  /ccls/src/makeserver/cmakeserver.cc.
+/// @author SysRay       
+/// Cmakeserver class.
+
 #include "ICMakeserver.hh"
 
 #include "config.hh"
@@ -27,31 +31,24 @@ extractCacheCMakeServer(std::string const &path);
 /// CMakeServer implementation
 class CMakeServer : public clang::tooling::CompilationDatabase {
 private:
-  std::unique_ptr<ICMakeServerTerminal>
-      m_terminal; ///< Terminal used for the server;
-  std::string const
-      m_buildDirectory; ///< Build directory with the cmakecache file
-  std::string const m_sourceDirectory; ///< Normaly the cmake_home_dir from the
-                                       ///< cmakecache file
-
-  std::unique_ptr<std::thread>
-      m_worker; ///< Thread that for the cmakeserver handling
+  std::unique_ptr<ICMakeServerTerminal>  m_terminal;  ///< Terminal used for the server;
+  std::string const m_buildDirectory;     ///< Build directory with the cmakecache file
+  std::string const m_sourceDirectory;    ///< Normaly the cmake_home_dir from the
+  std::unique_ptr<std::thread> m_worker;  ///< Thread  for the cmakeserver handling
+  
   /// Thread function
   void workerFunction();
-  bool m_isRunning = false; ///< is the thread running
+  bool m_isRunning = false;   ///< is the thread running
 
-  int m_versionMajor = 1; ///< comming from the cmakeserver: major version
-  int m_versionMinor = 0; ///< comming from the cmakeserver: minor version
-  bool m_rebuilding = true;
-  std::string const
-      m_pathCache; ///< The path were the cached file should be saved
+  int m_versionMajor = 1;     ///< comming from the cmakeserver: major version
+  int m_versionMinor = 0;     ///< comming from the cmakeserver: minor version
+  bool m_rebuilding = true;   ///< Is rebuilding
+  std::string const m_pathCache; ///< The path were the cached file should be saved
 
-  std::unordered_map<std::string, clang::tooling::CompileCommand>
-      m_files; ///< The extracted targets from the cmakeServer
+  std::unordered_map<std::string, clang::tooling::CompileCommand> m_files; ///< The extracted targets from the cmakeServer
   mutable std::mutex m_mtxInterface;
-
-  bool m_isExtracted = false;
   mutable std::condition_variable m_cond;
+  bool m_isExtracted = false;
 
 public:
   CMakeServer(std::string const &pathCache, std::string const &buildDirectory,

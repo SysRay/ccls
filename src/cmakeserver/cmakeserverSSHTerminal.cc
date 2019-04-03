@@ -1,3 +1,7 @@
+/// @file \ccls\src\cmakeserver\cmakeserverSSH2Terminal.cc.
+/// @author SysRay
+/// Cmakeserver SSH terminal class.
+
 #include "ICMakeserverTerminal.hh"
 #include "config.hh"
 #include "log.hh"
@@ -11,14 +15,16 @@ class ssh2Process
   : public ICMakeServerTerminal
 {
 private:
-  std::string m_path;
-  ssh_session m_session;
-  ssh_channel m_channel;
-  int m_sock;
-  std::array<char,2048> m_bufferRead;
-  std::atomic<bool> m_isRunning;
+  std::string m_path;     ///< Full pathname of the file
+  ssh_session m_session;  ///< The session
+  ssh_channel m_channel;  ///< The channel
+
+  std::array<char,2048> m_bufferRead; ///< The buffer for read
+  std::atomic<bool> m_isRunning;      ///< true if is running
 
 public:
+
+
   std::string read_blocking() final;
   bool write_blocking(std::string const&) final;
   bool write_blocking(std::string &&) final;
@@ -27,8 +33,20 @@ public:
     m_isRunning = false;
   }
 
-  bool init(std::string const& sshdir, std::string const &path, std::string const& hostname, std::string const& username, std::string const& password, int const port);
+  /// Initializes this object.
+  /// @param  sshdir    The sshdir where host keys etc. are saved.
+  /// @param  path      Full pathname of the file.
+  /// @param  hostname  The hostname.
+  /// @param  username  The username.
+  /// @param  password  The password.
+  /// @param  port      The port.
+  /// @return True if it succeeds, false if it fails.
+  bool init(std::string const &sshdir, std::string const &path,
+            std::string const &hostname, std::string const &username,
+            std::string const &password, int const port,
+            std::string const &preCommand);
  
+  /// Destructor.
   ~ssh2Process() {
     if (m_channel != nullptr) {
       ssh_channel_close(m_channel);
@@ -68,7 +86,6 @@ std::string ssh2Process::read_blocking(){
 
   return retData;
 }
-
 bool ssh2Process::write_blocking(std::string const& data) {
   if (!m_isValid) return false;
 
@@ -95,6 +112,12 @@ bool ssh2Process::write_blocking(std::string && data) {
 
   return true;
 }
+
+namespace {
+
+/// Verify knownhost.
+/// @param  session The session.
+/// @return True if it succeeds, false if it fails.
 bool verify_knownhost(ssh_session session)
 {
   enum ssh_known_hosts_e state;
@@ -165,8 +188,12 @@ bool verify_knownhost(ssh_session session)
   ssh_clean_pubkey_hash(&hash);
   return true;
 }
+}
 
-bool ssh2Process::init(std::string const& sshdir, std::string const &path, std::string const& hostname, std::string const& username, std::string const& password, int const port) {
+bool ssh2Process::init(std::string const &sshdir, std::string const &path,
+                       std::string const &hostname, std::string const &username,
+                       std::string const &password, int const port,
+                       std::string const &preCommand) {
   if (m_path.empty()) {
     m_path = path + CMAKE_PARAM_SERVERCALL;
 
@@ -221,7 +248,15 @@ bool ssh2Process::init(std::string const& sshdir, std::string const &path, std::
       m_channel = nullptr;
       return rc;
     }
-
+    if (preCommand.size()) {
+      rc = ssh_channel_request_exec(m_channel, preCommand.c_str());
+      if (rc != SSH_OK) {
+        ssh_channel_close(m_channel);
+        ssh_channel_free(m_channel);
+        m_channel = nullptr;
+        return rc;
+      }
+    }
     rc = ssh_channel_request_exec(m_channel, m_path.c_str());
     if (rc != SSH_OK)
     {
@@ -262,14 +297,15 @@ bool ssh2Process::restart() {
   return true;
 }
 
-// Factory
+
 std::unique_ptr<ICMakeServerTerminal> createRemoteCMakeServerTerminal(
     std::string const &sshdir, std::string const &path,
     std::string const &hostname, std::string const &username,
-    std::string const &password, int const port) {
+    std::string const &password, int const port,
+    std::string const &preCommand) {
   auto inst = std::make_unique<ssh2Process>();
 
-  if (inst->init(sshdir, path, hostname, username, password, port) == true) {
+  if (inst->init(sshdir, path, hostname, username, password, port, preCommand) == true) {
     return inst;
   }
 

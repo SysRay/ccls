@@ -1,3 +1,7 @@
+/// @file \ccls\src\cmakeserver\cmakeserverTerminal.cc.
+/// @author SysRay
+/// Cmakeserver terminal class.
+
 #include "ICMakeServerTerminal.hh"
 #include "config.hh"
 #include "log.hh"
@@ -25,7 +29,12 @@ public:
     DWORD  written;
     WriteFile(wPipeOutput, &chBuf[0], 1, &written, NULL);
   }
-  bool init(std::string const &path);
+
+  /// Initializes this object.
+  /// @param  path        Full pathname of the cmake exe.
+  /// @param  preCommand  This command is send bevor calling cmake. (for setting env)
+  /// @return True if it succeeds, false if it fails.
+  bool init(std::string const &path, std::string const &preCommand);
 
   ~consoleProcess() {
     if (m_isValid) {
@@ -53,7 +62,6 @@ std::string consoleProcess::read_blocking() {
     retData += std::string(chBuf, dwRead);
     break;
   }
-
   return retData;
 }
 
@@ -66,7 +74,7 @@ bool consoleProcess::write_blocking(std::string &&data) {
   return WriteFile(rPipeInput, &data[0], data.size(), &written, NULL);
 }
 
-bool consoleProcess::init(std::string const &path) {
+bool consoleProcess::init(std::string const &path, std::string const &preCommand) {
   if (m_path.empty()) {
     m_path = path;
     // Create pipes to write and read data
@@ -91,11 +99,14 @@ bool consoleProcess::init(std::string const &path) {
     si.hStdError = wPipeOutput;
     si.hStdOutput = wPipeOutput;
 
-    std::string temp = path + CMAKE_PARAM_SERVERCALL;
+    std::string temp = "cmd.exe /v /c " + preCommand + "&& \"" + path + "\"" + CMAKE_PARAM_SERVERCALL;
+    LOG_S(INFO) << temp;
     USES_CONVERSION;
     TCHAR *cmd = A2T(&temp[0]);
 
-    if (!CreateProcess(NULL, cmd, NULL, NULL, TRUE, flags, NULL, NULL, &si,
+    if (!CreateProcess(
+            NULL, cmd, NULL,
+            NULL, TRUE, flags, NULL, NULL, &si,
                        &m_processInfo)) {
       CloseHandle(m_processInfo.hProcess);
       CloseHandle(m_processInfo.hThread);
@@ -103,6 +114,8 @@ bool consoleProcess::init(std::string const &path) {
       CloseHandle(rPipeInput);
       return false;
     }
+    
+    
 
     m_isValid = true;
     return true;
@@ -159,10 +172,11 @@ bool consoleProcess::restart() {
 
 // Factory
 std::unique_ptr<ICMakeServerTerminal>
-createLocalCMakeServerTerminal(std::string const &path) {
+createLocalCMakeServerTerminal(std::string const &path,
+                               std::string const &preCommand) {
   auto inst = std::make_unique<consoleProcess>();
 
-  if (inst->init(path) == true) {
+  if (inst->init(path, preCommand) == true) {
     return inst;
   }
 

@@ -335,6 +335,7 @@ struct CMakeServerConfig {
   std::string user;
   std::string server;
   std::string sshDir;
+  std::string preCommand;
   bool _isValid = false;
 };
 
@@ -389,6 +390,11 @@ static CMakeServerConfig getCMakeServerConfig(std::string_view configData){
     LOG_S(ERROR) << "cmakeBuildDir not set in .cmakeServerConfig!";
     return {};
   }
+
+  if (document.FindMember("preCommand") != document.MemberEnd()) {
+    ret.preCommand = document["preCommand"].GetString();
+  }
+
   ret._isValid = true;
   return ret;
 }
@@ -455,10 +461,11 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
     std::unique_ptr<ICMakeServerTerminal> terminal;
     
     if (settings.runCmakeLocal)
-      terminal = createLocalCMakeServerTerminal(settings.cmakePath);
+      terminal = createLocalCMakeServerTerminal(settings.cmakePath,settings.preCommand);
     else
        terminal = createRemoteCMakeServerTerminal(
-          settings.sshDir, settings.cmakePath, settings.server, settings.user, "", 22);
+          settings.sshDir, settings.cmakePath, settings.server, settings.user,
+          "", 22, settings.preCommand);
 
     CDB = createCMakeServer(".vscode/CMakeServerCache.json",settings.cmakeBuildDir,settings.cmakeHomeDir, std::move(terminal));
   } else {

@@ -223,7 +223,7 @@ target_sources(ccls PRIVATE
 target_sources(ccls PRIVATE
   src/cmakeserver/cmakeserver.cc
   src/cmakeserver/cmakeserverTerminal.cc
-  src/cmakeserver/cmakeserverSSH2Terminal.cc
+  src/cmakeserver/cmakeserverSSHTerminal.cc
 )
 
 
