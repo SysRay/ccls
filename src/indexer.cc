@@ -1088,8 +1088,12 @@ public:
       return;
     if (IndexFile *db = param.ConsumeFile(*FE)) {
       std::string path = PathFromFileEntry(*File);
-      if (path.size())
-        db->includes.push_back({spell.start.line, Intern(path)});
+      if (path.size()) {
+		db->includes.push_back({spell.start.line, Intern(path)});
+      }
+      if (SrcMgr::isSystem(FileType)) {
+        ccls::SystemFileCacher::getInstance().addFile(path);
+	  }
     }
   }
   void MacroDefined(const Token &Tok, const MacroDirective *MD) override {

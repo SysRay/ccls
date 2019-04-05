@@ -15,12 +15,16 @@ limitations under the License.
 
 #pragma once
 
+#include "log.hh"
 #include "position.hh"
-
-#include <clang/Basic/LangOptions.h>
+#include "utils.hh"
 #include <clang/Basic/FileManager.h>
+#include <clang/Basic/LangOptions.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/CompilerInstance.h>
+#include <clang/Lex/PreprocessorOptions.h>
+#include <mutex>
+#include <unordered_map>
 
 #if LLVM_VERSION_MAJOR < 8
 // D52783 Lift VFS from clang to llvm
@@ -51,9 +55,38 @@ Range FromTokenRangeDefaulted(const clang::SourceManager &SM,
                               Range range);
 
 std::unique_ptr<clang::CompilerInvocation>
-BuildCompilerInvocation(const std::string &main,
-                        std::vector<const char *> args,
+BuildCompilerInvocation(const std::string &main, std::vector<const char *> args,
                         llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> VFS);
 
+class SystemFileCacher {
+  std::unordered_map<std::string, std::string> files;
+  std::mutex m_mtx;
+
+public:
+  void addFile(std::string const &path) {
+    std::unique_lock lock(m_mtx);
+
+    if (files.find(path) == files.end()) {
+      auto file = ccls::ReadContent(path);
+      if (file) {
+        files.emplace(std::make_pair(path, *file));
+      }
+    }
+  }
+
+  void remapFiles(clang::CompilerInvocation* CI ) {
+    std::unique_lock lock(m_mtx);
+    for (auto &item : files) {
+      CI->getPreprocessorOpts().addRemappedFile(
+          item.first, llvm::MemoryBuffer::getMemBuffer(item.second).release());
+    }
+  }
+  static SystemFileCacher &getInstance() {
+    static SystemFileCacher inst;
+    return inst;
+  }
+
+private:
+};
 const char *ClangBuiltinTypeName(int);
 } // namespace ccls

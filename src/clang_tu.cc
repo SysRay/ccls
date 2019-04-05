@@ -104,9 +104,12 @@ BuildCompilerInvocation(const std::string &main, std::vector<const char *> args,
     CI->getDiagnosticOpts().IgnoreWarnings = true;
     CI->getFrontendOpts().DisableFree = false;
     CI->getLangOpts()->SpellChecking = false;
+    
     auto &IS = CI->getFrontendOpts().Inputs;
     if (IS.size())
       IS[0] = FrontendInputFile(main, IS[0].getKind(), IS[0].isSystem());
+
+	SystemFileCacher::getInstance().remapFiles(CI.get());
   }
   return CI;
 }
