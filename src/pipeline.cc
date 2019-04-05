@@ -432,16 +432,16 @@ bool Indexer_Parse(SemaManager *completion, WorkingFiles *wfiles,
         auto &folder = project->root2folder[entry.root];
         for (auto &dep : curr->dependencies) {
           int const lastIndex = folder.path2entry_index[dep.first.val().str()];
-
           if (lastIndex > 0) {
             int score = ComputeGuessScore(dep.first.val().str(),entry.filename);
-            int score2 = ComputeGuessScore(dep.first.val().str(), folder.entries[lastIndex].filename);
 
-            if (score > score2) {
+            if (score > entry._score) {
+              entry._score = score;
               folder.path2entry_index[dep.first.val().str()] = entry.id;
             }
           } else {
-            folder.path2entry_index[dep.first.val().str()] = entry.id;
+            entry._score = ComputeGuessScore(dep.first.val().str(), entry.filename);
+			folder.path2entry_index[dep.first.val().str()] = entry.id;
           }
         }
       }
