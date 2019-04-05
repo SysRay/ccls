@@ -271,7 +271,7 @@ void CMakeServer::workerFunction() {
           LOG_S(INFO) << "[CMakeServer] --> generating codemodel ...";
           m_terminal->write_blocking(CMAKE_SERVER_COMMAND_CODEMODEL);
         } else if (std::string(document["inReplyTo"].GetString()).compare("codemodel") == 0) {
-          LOG_S(INFO) << "[CMakeServer]  <- codemodel complete!";
+          LOG_S(INFO) << "[CMakeServer]  <- codemodel done!";
           m_rebuilding = false;
 
           // We got the project structure!
@@ -298,7 +298,7 @@ void CMakeServer::workerFunction() {
             m_files.swap(temp);
           }
 
-          LOG_S(INFO) << "[CMakeServer]  <- Extraction completed!";
+          LOG_S(INFO) << "[CMakeServer]  <- Extraction done!";
           m_isExtracted = true;
           m_cond.notify_all();
 
