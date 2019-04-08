@@ -6,7 +6,7 @@
 #include <string>
 #include <memory>
 #include <vector>
-
+#include "log.hh"
 
 /// Terminal for CmakeServer to communicate with.
 class ICMakeServerTerminal {
@@ -33,20 +33,45 @@ public:
   /// Deinits the terminal.
   virtual void deinit() = 0;
   virtual ~ICMakeServerTerminal() = default;
-protected:
+
+  std::string getPathCode() {
+    return m_pathCode;
+  }
+
+  protected:
+  std::string m_pathCode; ///< CodeDirectory 
 
   bool m_isValid = false;
+
+  std::string getArg (std::string const& file,  std::string &&name) {
+    std::string ret;
+    auto line = file.find(name);
+    if (line != std::string::npos) {
+      auto start = file.find('=', line);
+      if (start != std::string::npos) {
+        auto end = file.find('\n', ++start);
+        if (end != std::string::npos) {
+          if (file.at(end) == '\r')
+            --end;
+          return file.substr(start, end - start - 1);
+        }
+      }
+    }
+    return ret;
+  };
 };
 
 /// Creates a process with input and output pipe for cmake running localy.
 /// @return nullptr on error.
 std::unique_ptr<ICMakeServerTerminal>
-createLocalCMakeServerTerminal(std::string const &path,
+createLocalCMakeServerTerminal(std::string const &pathBuild,
+                               std::string const &pathCmake,
                                std::string const &preCommand);
 
 /// Creates a process with input and output pipe for cmake running localy.
 /// @return nullptr on error.
 std::unique_ptr<ICMakeServerTerminal> createRemoteCMakeServerTerminal(
-    std::string const &sshdir, std::string const &path,
+    std::string const &sshdir, std::string const &pathBuild,
+    std::string const &pathCmake,
     std::string const &hostname, std::string const &username,
     std::string const &password, int const port, std::string const &preCommand);

@@ -33,7 +33,6 @@ class CMakeServer : public clang::tooling::CompilationDatabase {
 private:
   std::unique_ptr<ICMakeServerTerminal>  m_terminal;  ///< Terminal used for the server;
   std::string const m_buildDirectory;     ///< Build directory with the cmakecache file
-  std::string const m_sourceDirectory;    ///< Normaly the cmake_home_dir from the
   std::unique_ptr<std::thread> m_worker;  ///< Thread  for the cmakeserver handling
   
   /// Thread function
@@ -52,10 +51,9 @@ private:
 
 public:
   CMakeServer(std::string const &pathCache, std::string const &buildDirectory,
-              std::string const &sourceDirectory,
               std::unique_ptr<ICMakeServerTerminal> terminal)
       : m_terminal(std::move(terminal)), m_buildDirectory(buildDirectory),
-        m_sourceDirectory(sourceDirectory), m_pathCache(pathCache) {
+       m_pathCache(pathCache) {
 
     std::lock_guard<std::mutex> lock(m_mtxInterface);
 
@@ -234,7 +232,7 @@ void CMakeServer::workerFunction() {
             // Send Handshake
             m_terminal->write_blocking(CMAKE_SERVER_COMMAND_HANDSHAKE(
                 m_versionMajor, m_versionMinor, m_buildDirectory,
-                m_sourceDirectory));
+                m_terminal->getPathCode()));
 
             found = true;
             break;
@@ -362,10 +360,9 @@ void CMakeServer::workerFunction() {
 std::unique_ptr<clang::tooling::CompilationDatabase> createCMakeServer(
                   std::string const pathCache,
                   std::string const &buildDirectory,
-                  std::string const &sourceDirectory,
                   std::unique_ptr<ICMakeServerTerminal> terminal) 
 {
-  return std::make_unique<CMakeServer>(pathCache, buildDirectory, sourceDirectory, std::move(terminal));
+  return std::make_unique<CMakeServer>(pathCache, buildDirectory, std::move(terminal));
 }
 
 namespace {

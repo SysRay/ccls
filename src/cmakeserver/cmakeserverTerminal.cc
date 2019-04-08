@@ -5,6 +5,7 @@
 #include "ICMakeServerTerminal.hh"
 #include "config.hh"
 #include "log.hh"
+#include "utils.hh"
 
 #include <atlstr.h>  // windows
 #include <windows.h> // windows
@@ -34,7 +35,7 @@ public:
   /// @param  path        Full pathname of the cmake exe.
   /// @param  preCommand  This command is send bevor calling cmake. (for setting env)
   /// @return True if it succeeds, false if it fails.
-  bool init(std::string const &path, std::string const &preCommand);
+  bool init(std::string const &pathBuild, std::string const &pathCmake, std::string const &preCommand);
 
   ~consoleProcess() {
     if (m_isValid) {
@@ -74,9 +75,25 @@ bool consoleProcess::write_blocking(std::string &&data) {
   return WriteFile(rPipeInput, &data[0], data.size(), &written, NULL);
 }
 
-bool consoleProcess::init(std::string const &path, std::string const &preCommand) {
+bool consoleProcess::init(std::string const &pathBuild, std::string const& pathCmake, std::string const &preCommand) {
   if (m_path.empty()) {
-    m_path = path;
+    m_path = pathCmake;
+
+    auto file = ccls::ReadContent(pathBuild);
+    if (file) {
+      m_pathCode = getArg(*file,"CMAKE_HOME_DIRECTORY");
+      LOG_S(INFO) << "[CMakeCache] Path to code is: " << m_pathCode;
+
+      if (m_path.empty()) {
+        m_path = getArg(*file, "CMAKE_COMMAND");
+      }
+      
+      LOG_S(INFO) << "[CMakeCache] Path to exe is: " << m_path;
+    } else {
+      LOG_S(ERROR) << "[CMakeCache] Couldn't find file: " << pathBuild;
+      return false;
+    }
+
     // Create pipes to write and read data
     SECURITY_ATTRIBUTES secattr;
     ZeroMemory(&secattr, sizeof(secattr));
@@ -101,7 +118,7 @@ bool consoleProcess::init(std::string const &path, std::string const &preCommand
 
     std::string temp = "cmd.exe /v /c ";
     if(preCommand.size()) temp += preCommand + "&&";
-    temp += "\"" + path + "\"" + CMAKE_PARAM_SERVERCALL;
+    temp += "\"" + m_path + "\"" + CMAKE_PARAM_SERVERCALL;
 
     LOG_S(INFO) << temp;
     USES_CONVERSION;
@@ -175,11 +192,12 @@ bool consoleProcess::restart() {
 
 // Factory
 std::unique_ptr<ICMakeServerTerminal>
-createLocalCMakeServerTerminal(std::string const &path,
+createLocalCMakeServerTerminal(std::string const &pathBuild,
+                               std::string const &pathCmake,
                                std::string const &preCommand) {
   auto inst = std::make_unique<consoleProcess>();
 
-  if (inst->init(path, preCommand) == true) {
+  if (inst->init(pathBuild, pathCmake, preCommand) == true) {
     return inst;
   }
 

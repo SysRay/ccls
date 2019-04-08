@@ -346,9 +346,6 @@ static CMakeServerConfig getCMakeServerConfig(std::string_view configData){
 
   if (document.FindMember("cmakePath") != document.MemberEnd()) {
     ret.cmakePath = document["cmakePath"].GetString();
-  } else {
-    LOG_S(ERROR) << "cmakePath not set in .cmakeServerConfig!";
-    return {};
   }
 
   if (document.FindMember("runCmakeLocal") != document.MemberEnd()) {
@@ -375,13 +372,6 @@ static CMakeServerConfig getCMakeServerConfig(std::string_view configData){
         return {};
       }
     }
-  }
-
-  if (document.FindMember("cmakeHomeDir") != document.MemberEnd()) {
-    ret.cmakeHomeDir = document["cmakeHomeDir"].GetString();
-  } else {
-    LOG_S(ERROR) << "cmakeHomeDir not set in .cmakeServerConfig!";
-    return {};
   }
 
   if (document.FindMember("cmakeBuildDir") != document.MemberEnd()) {
@@ -461,13 +451,15 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
     std::unique_ptr<ICMakeServerTerminal> terminal;
     
     if (settings.runCmakeLocal)
-      terminal = createLocalCMakeServerTerminal(settings.cmakePath,settings.preCommand);
+      terminal = createLocalCMakeServerTerminal(settings.cmakeBuildDir + "/CMakeCache.txt", settings.cmakePath ,settings.preCommand);
     else
        terminal = createRemoteCMakeServerTerminal(
-          settings.sshDir, settings.cmakePath, settings.server, settings.user,
+          settings.sshDir,
+          settings.cmakeBuildDir + "/CMakeCache.txt" , settings.cmakePath,
+          settings.server, settings.user,
           "", 22, settings.preCommand);
 
-    CDB = createCMakeServer(".vscode/CMakeServerCache.json",settings.cmakeBuildDir,settings.cmakeHomeDir, std::move(terminal));
+    CDB = createCMakeServer(".vscode/CMakeServerCache.json",settings.cmakeBuildDir, std::move(terminal));
   } else {
     CDB = tooling::CompilationDatabase::loadFromDirectory(CDBDir, err_msg);
     if (CDB)
