@@ -23,6 +23,7 @@ limitations under the License.
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <limits>
 
 namespace ccls {
 struct WorkingFiles;
@@ -42,6 +43,7 @@ struct Project {
     // 0 unless coming from a compile_commands.json entry.
     int compdb_size = 0;
     int id = -1;
+    int _score = std::numeric_limits<int>::min();
   };
 
   struct Folder {

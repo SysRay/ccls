@@ -303,7 +303,6 @@ BuildCompilerInstance(Session &session, std::unique_ptr<CompilerInvocation> CI,
                       const std::string &main,
                       std::unique_ptr<llvm::MemoryBuffer> &Buf) {
   if (preamble) {
-    LOG_S(INFO) << "ov: " << main;
     preamble->Preamble.OverridePreamble(*CI, FS, Buf.get());
   } else
     CI->getPreprocessorOpts().addRemappedFile(main, Buf.get());
@@ -357,8 +356,6 @@ void BuildPreamble(Session &session, CompilerInvocation &CI,
   
   auto Bounds = ComputePreambleBounds(*CI.getLangOpts(), Buf.get(), 0);
 
-LOG_S(INFO) << "pre: " << task.path;
-
   if (!task.from_diag && OldP &&
       OldP->Preamble.CanReuse(CI, Buf.get(), Bounds, FS.get()))
     return;
@@ -374,7 +371,6 @@ LOG_S(INFO) << "pre: " << task.path;
   StoreDiags DC(task.path);
   IntrusiveRefCntPtr<DiagnosticsEngine> DE =
       CompilerInstance::createDiagnostics(&CI.getDiagnosticOpts(), &DC, false);
-  LOG_S(INFO) << "pre2: " << task.path << "   " << !OldP;
   if (OldP) {
     std::lock_guard lock(session.wfiles->mutex);
     for (auto &include : OldP->includes) {

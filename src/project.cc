@@ -515,6 +515,9 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
           entry.args.push_back(Intern(arg));
       }
       entry.args.push_back(Intern(entry.filename));
+      if (entry.filename.empty()) {
+        LOG_S(ERROR) << "Couldn't resolve: " << Cmd.Filename;
+	  }
       entry.compdb_size = entry.args.size();
 
       // Work around relative --sysroot= as it isn't affected by
