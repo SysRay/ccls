@@ -36,8 +36,8 @@ limitations under the License.
 #include <llvm/Support/LineIterator.h>
 #include <llvm/Support/Program.h>
 
-#include <rapidjson/writer.h>
 #include <rapidjson/document.h>
+#include <rapidjson/writer.h>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -100,8 +100,9 @@ struct ProjectProcessor {
   }
 
   bool ExcludesArg(StringRef arg) {
-    return exclude_args.count(arg) || any_of(exclude_globs,
-    [&](const GlobPattern &glob) { return glob.match(arg); });
+    return exclude_args.count(arg) ||
+           any_of(exclude_globs,
+                  [&](const GlobPattern &glob) { return glob.match(arg); });
   }
 
   // Expand %c %cpp ... in .ccls
@@ -269,7 +270,8 @@ void LoadDirectoryListing(ProjectProcessor &proc, const std::string &root,
     return folder.dot_ccls[root];
   };
 
-  GetFilesInFolder(root, true /*recursive*/, true /*add_folder_to_path*/,
+  GetFilesInFolder(
+      root, true /*recursive*/, true /*add_folder_to_path*/,
       [&folder, &files, &Seen](const std::string &path) {
         std::pair<LanguageId, bool> lang = lookupExtension(path);
         if (lang.first != LanguageId::Unknown && !lang.second) {
@@ -335,11 +337,11 @@ struct CMakeServerConfig {
   std::string user;
   std::string server;
   std::string sshDir;
-  std::string preCommand;
+  std::vector<std::pair<std::string, std::string>> preCommand;
   bool _isValid = false;
 };
 
-static CMakeServerConfig getCMakeServerConfig(std::string_view configData){
+static CMakeServerConfig getCMakeServerConfig(std::string_view configData) {
   CMakeServerConfig ret;
   rapidjson::Document document;
   document.Parse(configData.data());
@@ -392,13 +394,16 @@ static CMakeServerConfig getCMakeServerConfig(std::string_view configData){
   }
 
   if (document.FindMember("preCommand") != document.MemberEnd()) {
-    ret.preCommand = document["preCommand"].GetString();
+#undef GetObject()
+    for (auto &item : document["preCommand"].GetObject()) {
+      ret.preCommand.push_back({item.name.GetString(), item.value.GetString()});
+	}
   }
 
   ret._isValid = true;
   return ret;
 }
-  
+
 void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
   SmallString<256> CDBDir, Path, StdinPath;
   std::string err_msg;
@@ -406,7 +411,8 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
   if (g_config->compilationDatabaseCommand.empty()) {
     CDBDir = root;
     if (g_config->compilationDatabaseDirectory.size()) {
-      if (std::filesystem::path(g_config->compilationDatabaseDirectory).is_relative())
+      if (std::filesystem::path(g_config->compilationDatabaseDirectory)
+              .is_relative())
         sys::path::append(CDBDir, g_config->compilationDatabaseDirectory);
       else
         CDBDir = g_config->compilationDatabaseDirectory;
@@ -451,7 +457,7 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
   }
 
   std::unique_ptr<tooling::CompilationDatabase> CDB;
-     
+
   auto file = ccls::ReadContent(".vscode/CMakeServerConfig.json");
   if (file) {
     auto settings = getCMakeServerConfig(*file);
@@ -459,20 +465,24 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       return;
 
     std::unique_ptr<ICMakeServerTerminal> terminal;
-    
+
     if (settings.runCmakeLocal)
-      terminal = createLocalCMakeServerTerminal(settings.cmakePath,settings.preCommand);
+      terminal = createLocalCMakeServerTerminal(settings.cmakePath,
+                                                settings.preCommand);
     else
-       terminal = createRemoteCMakeServerTerminal(
+      terminal = createRemoteCMakeServerTerminal(
           settings.sshDir, settings.cmakePath, settings.server, settings.user,
           "", 22, settings.preCommand);
 
-    CDB = createCMakeServer(".vscode/CMakeServerCache.json",settings.cmakeBuildDir,settings.cmakeHomeDir, std::move(terminal));
+    CDB = createCMakeServer(".vscode/CMakeServerCache.json",
+                            settings.cmakeBuildDir, settings.cmakeHomeDir,
+                            std::move(terminal));
   } else {
     CDB = tooling::CompilationDatabase::loadFromDirectory(CDBDir, err_msg);
     if (CDB)
       LOG_S(INFO) << "loaded " << Path.c_str();
-    else if (g_config->compilationDatabaseCommand.size() || sys::fs::exists(Path))
+    else if (g_config->compilationDatabaseCommand.size() ||
+             sys::fs::exists(Path))
       LOG_S(ERROR) << "failed to load " << Path.c_str();
   }
 
@@ -512,10 +522,12 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       std::vector<std::string> args = std::move(Cmd.CommandLine);
       entry.args.reserve(args.size());
       for (std::string &arg : args) {
-        if (arg.compare(0, 2, "-I") != 0 && arg.compare(0, 2, "-D") && arg.compare(0, 8, "-isystem") != 0)
+        if (arg.compare(0, 2, "-I") != 0 && arg.compare(0, 2, "-D") &&
+            arg.compare(0, 8, "-isystem") != 0)
           continue;
 
-        if (arg.compare(0, 2, "-I") == 0 || arg.compare(0, 8, "-isystem") == 0) {
+        if (arg.compare(0, 2, "-I") == 0 ||
+            arg.compare(0, 8, "-isystem") == 0) {
           DoPathMapping(arg);
           // arg = "-I" + RealPath(arg.substr(2)); // Todo: test if needed
         }
@@ -525,7 +537,7 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       entry.args.push_back(Intern(entry.filename));
       if (entry.filename.empty()) {
         LOG_S(ERROR) << "Couldn't resolve: " << Cmd.Filename;
-	  }
+      }
       entry.compdb_size = entry.args.size();
 
       // Work around relative --sysroot= as it isn't affected by

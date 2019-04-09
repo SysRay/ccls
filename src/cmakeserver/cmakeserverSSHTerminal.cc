@@ -44,7 +44,7 @@ public:
   bool init(std::string const &sshdir, std::string const &path,
             std::string const &hostname, std::string const &username,
             std::string const &password, int const port,
-            std::string const &preCommand);
+            std::vector<std::pair<std::string, std::string>> const &preCommand);
  
   /// Destructor.
   ~ssh2Process() {
@@ -193,7 +193,7 @@ bool verify_knownhost(ssh_session session)
 bool ssh2Process::init(std::string const &sshdir, std::string const &path,
                        std::string const &hostname, std::string const &username,
                        std::string const &password, int const port,
-                       std::string const &preCommand) {
+    std::vector<std::pair<std::string, std::string>> const &preCommand) {
   if (m_path.empty()) {
     m_path = path + CMAKE_PARAM_SERVERCALL;
 
@@ -248,15 +248,17 @@ bool ssh2Process::init(std::string const &sshdir, std::string const &path,
       m_channel = nullptr;
       return rc;
     }
-    if (preCommand.size()) {
-      rc = ssh_channel_request_exec(m_channel, preCommand.c_str());
-      if (rc != SSH_OK) {
-        ssh_channel_close(m_channel);
-        ssh_channel_free(m_channel);
-        m_channel = nullptr;
-        return rc;
+    
+    for (auto const &env : preCommand) {
+      rc = ssh_channel_request_env(m_channel, env.first.c_str() ,env.second.c_str());
+		if (rc != SSH_OK) {
+		ssh_channel_close(m_channel);
+		ssh_channel_free(m_channel);
+		m_channel = nullptr;
+		return rc;
       }
     }
+      
     rc = ssh_channel_request_exec(m_channel, m_path.c_str());
     if (rc != SSH_OK)
     {
@@ -302,7 +304,7 @@ std::unique_ptr<ICMakeServerTerminal> createRemoteCMakeServerTerminal(
     std::string const &sshdir, std::string const &path,
     std::string const &hostname, std::string const &username,
     std::string const &password, int const port,
-    std::string const &preCommand) {
+    std::vector<std::pair<std::string, std::string>> const &preCommand) {
   auto inst = std::make_unique<ssh2Process>();
 
   if (inst->init(sshdir, path, hostname, username, password, port, preCommand) == true) {

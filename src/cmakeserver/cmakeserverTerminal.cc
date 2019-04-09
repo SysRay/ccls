@@ -34,7 +34,7 @@ public:
   /// @param  path        Full pathname of the cmake exe.
   /// @param  preCommand  This command is send bevor calling cmake. (for setting env)
   /// @return True if it succeeds, false if it fails.
-  bool init(std::string const &path, std::string const &preCommand);
+  bool init(std::string const &path, std::vector<std::pair<std::string, std::string>> const &preCommand);
 
   ~consoleProcess() {
     if (m_isValid) {
@@ -74,7 +74,9 @@ bool consoleProcess::write_blocking(std::string &&data) {
   return WriteFile(rPipeInput, &data[0], data.size(), &written, NULL);
 }
 
-bool consoleProcess::init(std::string const &path, std::string const &preCommand) {
+bool consoleProcess::init(
+    std::string const &path,
+    std::vector<std::pair<std::string, std::string>> const &preCommand) {
   if (m_path.empty()) {
     m_path = path;
     // Create pipes to write and read data
@@ -100,24 +102,22 @@ bool consoleProcess::init(std::string const &path, std::string const &preCommand
     si.hStdOutput = wPipeOutput;
 
     std::string temp = "cmd.exe /v /c ";
-    if(preCommand.size()) temp += preCommand + "&&";
+    for (auto const& item: preCommand){
+      temp += "set " + item.first + "=" + item.second + "&&";
+	}
     temp += "\"" + path + "\"" + CMAKE_PARAM_SERVERCALL;
 
     LOG_S(INFO) << temp;
     USES_CONVERSION;
     TCHAR *cmd = A2T(&temp[0]);
 
-    if (!CreateProcess(
-            NULL, cmd, NULL,
-            NULL, TRUE, flags, NULL, NULL, &si,
-                       &m_processInfo)) {
+    if (!CreateProcess( NULL, cmd, NULL, NULL, TRUE, flags, NULL, NULL, &si, &m_processInfo)) {
       CloseHandle(m_processInfo.hProcess);
       CloseHandle(m_processInfo.hThread);
       CloseHandle(wPipeOutput);
       CloseHandle(rPipeInput);
       return false;
     }
-    
     
 
     m_isValid = true;
@@ -176,7 +176,7 @@ bool consoleProcess::restart() {
 // Factory
 std::unique_ptr<ICMakeServerTerminal>
 createLocalCMakeServerTerminal(std::string const &path,
-                               std::string const &preCommand) {
+    std::vector<std::pair<std::string, std::string>> const &preCommand) {
   auto inst = std::make_unique<consoleProcess>();
 
   if (inst->init(path, preCommand) == true) {
