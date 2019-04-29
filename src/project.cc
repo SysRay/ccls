@@ -337,7 +337,7 @@ struct CMakeServerConfig {
   std::string user;
   std::string server;
   std::string sshDir;
-  std::vector<std::pair<std::string, std::string>> preCommand;
+  std::string preCommand;
   bool _isValid = false;
 };
 
@@ -348,9 +348,6 @@ static CMakeServerConfig getCMakeServerConfig(std::string_view configData) {
 
   if (document.FindMember("cmakePath") != document.MemberEnd()) {
     ret.cmakePath = document["cmakePath"].GetString();
-  } else {
-    LOG_S(ERROR) << "cmakePath not set in .cmakeServerConfig!";
-    return {};
   }
 
   if (document.FindMember("runCmakeLocal") != document.MemberEnd()) {
@@ -379,13 +376,6 @@ static CMakeServerConfig getCMakeServerConfig(std::string_view configData) {
     }
   }
 
-  if (document.FindMember("cmakeHomeDir") != document.MemberEnd()) {
-    ret.cmakeHomeDir = document["cmakeHomeDir"].GetString();
-  } else {
-    LOG_S(ERROR) << "cmakeHomeDir not set in .cmakeServerConfig!";
-    return {};
-  }
-
   if (document.FindMember("cmakeBuildDir") != document.MemberEnd()) {
     ret.cmakeBuildDir = document["cmakeBuildDir"].GetString();
   } else {
@@ -394,10 +384,7 @@ static CMakeServerConfig getCMakeServerConfig(std::string_view configData) {
   }
 
   if (document.FindMember("preCommand") != document.MemberEnd()) {
-#undef GetObject()
-    for (auto &item : document["preCommand"].GetObject()) {
-      ret.preCommand.push_back({item.name.GetString(), item.value.GetString()});
-	}
+    ret.preCommand = document["preCommand"].GetString();
   }
 
   ret._isValid = true;
@@ -465,24 +452,25 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       return;
 
     std::unique_ptr<ICMakeServerTerminal> terminal;
-
-    if (settings.runCmakeLocal)
-      terminal = createLocalCMakeServerTerminal(settings.cmakePath,
-                                                settings.preCommand);
+    
+   if (settings.runCmakeLocal)
+      terminal = createLocalCMakeServerTerminal(
+          settings.cmakeBuildDir + "/CMakeCache.txt", settings.cmakePath,
+          settings.preCommand);
     else
       terminal = createRemoteCMakeServerTerminal(
-          settings.sshDir, settings.cmakePath, settings.server, settings.user,
-          "", 22, settings.preCommand);
+          settings.sshDir, settings.cmakeBuildDir + "/CMakeCache.txt",
+          settings.cmakePath, settings.server, settings.user, "", 22,
+          settings.preCommand);
 
     CDB = createCMakeServer(".vscode/CMakeServerCache.json",
-                            settings.cmakeBuildDir, settings.cmakeHomeDir,
-                            std::move(terminal));
+                            settings.cmakeBuildDir, std::move(terminal));
   } else {
     CDB = tooling::CompilationDatabase::loadFromDirectory(CDBDir, err_msg);
     if (CDB)
       LOG_S(INFO) << "loaded " << Path.c_str();
-    else if (g_config->compilationDatabaseCommand.size() ||
-             sys::fs::exists(Path))
+    else if (g_config->compilationDatabaseCommand.size() || 
+		sys::fs::exists(Path))
       LOG_S(ERROR) << "failed to load " << Path.c_str();
   }
 
@@ -511,25 +499,30 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       // If workspace folder is real/ but entries use symlink/, convert to
       // real/.
       DoPathMapping(Cmd.Directory);
-      entry.directory = RealPath(Cmd.Directory);
+      entry.directory = Cmd.Directory;
       NormalizeFolder(entry.directory);
-
       DoPathMapping(Cmd.Filename);
-      entry.filename =
-          RealPath(ResolveIfRelative(entry.directory, Cmd.Filename));
+      entry.filename = Cmd.Filename;
       NormalizeFolder(entry.filename);
 
       std::vector<std::string> args = std::move(Cmd.CommandLine);
       entry.args.reserve(args.size());
       for (std::string &arg : args) {
-        if (arg.compare(0, 2, "-I") != 0 && arg.compare(0, 2, "-D") &&
-            arg.compare(0, 8, "-isystem") != 0)
+        if(arg.compare(0, 2, "-c") == 0 || arg.compare(0, 3, "--c") == 0) {
+			if (arg.compare(0, 2, "-c") == 0) {
+				entry.args.push_back(Intern("-Dbool=int"));
+				arg.replace(0, arg.find('c'), "-std=");
+            } else {
+                          arg = "-std=c++14";         
+			}
+           
+		}else if (arg.compare(0, 2, "-I") != 0 && arg.compare(0, 2, "-D") &&
+            arg.compare(0, 2, "-x") != 0 && arg.compare(0, 8, "-isystem") != 0)
           continue;
 
         if (arg.compare(0, 2, "-I") == 0 ||
-            arg.compare(0, 8, "-isystem") == 0) {
+                    arg.compare(0, 8, "-isystem") == 0) {
           DoPathMapping(arg);
-          // arg = "-I" + RealPath(arg.substr(2)); // Todo: test if needed
         }
         if (!proc.ExcludesArg(arg))
           entry.args.push_back(Intern(arg));
@@ -537,7 +530,7 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       entry.args.push_back(Intern(entry.filename));
       if (entry.filename.empty()) {
         LOG_S(ERROR) << "Couldn't resolve: " << Cmd.Filename;
-      }
+	  }
       entry.compdb_size = entry.args.size();
 
       // Work around relative --sysroot= as it isn't affected by
@@ -647,7 +640,7 @@ out:
       if (dir.size() && !StringRef(path).startswith(dir))
         continue;
       for (const Entry &e : folder.entries)
-        if (e.compdb_size) {
+        if (e.compdb_size && e.filename.size()) {
           int score = ComputeGuessScore(path, e.filename);
           if (score > best_score) {
             best_score = score;

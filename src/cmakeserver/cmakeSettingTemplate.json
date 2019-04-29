@@ -1,5 +1,5 @@
 {
-  "cmakePath": "cmake.exe",
+  "cmakePath": "",
   "cmakeHomeDir": "",
   "cmakeBuildDir": "",
   "runCmakeLocal": true,

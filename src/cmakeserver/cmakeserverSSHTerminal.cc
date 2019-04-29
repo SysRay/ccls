@@ -41,14 +41,15 @@ public:
   /// @param  password  The password.
   /// @param  port      The port.
   /// @return True if it succeeds, false if it fails.
-  bool init(std::string const &sshdir, std::string const &path,
-            std::string const &hostname, std::string const &username,
-            std::string const &password, int const port,
-            std::vector<std::pair<std::string, std::string>> const &preCommand);
+  bool init(std::string const &sshdir, std::string const &pathBuild,
+            std::string const &pathCmake, std::string const &hostname,
+            std::string const &username, std::string const &password,
+            int const port, std::string const &preCommand);
  
   /// Destructor.
   ~ssh2Process() {
     if (m_channel != nullptr) {
+      ssh_channel_send_eof(m_channel);
       ssh_channel_close(m_channel);
       ssh_channel_free(m_channel);
     }
@@ -75,9 +76,6 @@ std::string ssh2Process::read_blocking(){
       break;
     }
     else if (nbytes == SSH_AGAIN) {
-      continue;
-    } 
-	else if (nbytes == SSH_AGAIN) {
       continue;
     }
 
@@ -190,12 +188,13 @@ bool verify_knownhost(ssh_session session)
 }
 }
 
-bool ssh2Process::init(std::string const &sshdir, std::string const &path,
+bool ssh2Process::init(std::string const &sshdir, std::string const &pathBuild,
+                       std::string const &pathCmake,
                        std::string const &hostname, std::string const &username,
                        std::string const &password, int const port,
-    std::vector<std::pair<std::string, std::string>> const &preCommand) {
+					   std::string const &preCommand) {
   if (m_path.empty()) {
-    m_path = path + CMAKE_PARAM_SERVERCALL;
+    m_path = pathCmake;
 
     m_session = ssh_new();
     if (m_session == nullptr) return false;
@@ -237,10 +236,13 @@ bool ssh2Process::init(std::string const &sshdir, std::string const &path,
       return false;
     }
     */
+
     int rc;
+    // Read CmakeCache.txt
     m_channel = ssh_channel_new(m_session);
-    if (m_channel == NULL)
+    if (m_channel == NULL) 
       return SSH_ERROR;
+
     rc = ssh_channel_open_session(m_channel);
     if (rc != SSH_OK)
     {
@@ -248,29 +250,77 @@ bool ssh2Process::init(std::string const &sshdir, std::string const &path,
       m_channel = nullptr;
       return rc;
     }
-    
-    for (auto const &env : preCommand) {
-      rc = ssh_channel_request_env(m_channel, env.first.c_str() ,env.second.c_str());
-		if (rc != SSH_OK) {
-		ssh_channel_close(m_channel);
-		ssh_channel_free(m_channel);
-		m_channel = nullptr;
-		return rc;
-      }
+
+    rc = ssh_channel_request_exec(m_channel, (std::string("cat ") + pathBuild).c_str());
+    if (rc != SSH_OK) {
+      ssh_channel_close(m_channel);
+      ssh_channel_free(m_channel);
+      m_channel = nullptr;
+      LOG_S(ERROR) << "[CMakeCache] Couldn't open file: " << pathBuild;
+      return rc;
     }
-      
+    
+    std::string file;
+    int nbytes;
+    do {
+      nbytes = ssh_channel_read_timeout(m_channel, m_bufferRead.data(), m_bufferRead.size(), 0, 100);
+	  if (nbytes == SSH_ERROR) {
+        LOG_S(ERROR) << "[libSSH] couldn't read! " << ssh_get_error(m_session);
+        break;
+      } else if (nbytes == SSH_AGAIN) {
+        continue;
+      }
+      file += std::string(m_bufferRead.data(), nbytes);
+    } while (nbytes > 0);
+
+    if (file.size()) {
+      m_pathCode = getArg(file, "CMAKE_HOME_DIRECTORY");
+      LOG_S(INFO) << "[CMakeCache] Path to code is: " << m_pathCode;
+
+      if (m_path.empty()) {
+        m_path = getArg(file, "CMAKE_COMMAND");
+      }
+
+      LOG_S(INFO) << "[CMakeCache] Path to exe is: " << m_path;
+    } else {
+      LOG_S(ERROR) << "[CMakeCache] Couldn't find file: " << pathBuild;
+    }
+    ssh_channel_send_eof(m_channel);
+    ssh_channel_close(m_channel);
+    ssh_channel_free(m_channel);
+    //- 
+    m_path += CMAKE_PARAM_SERVERCALL;
+
+    // Start CmakeServer
+    m_channel = ssh_channel_new(m_session);
+    if (m_channel == NULL) {
+		return SSH_ERROR;
+    }
+     
+    rc = ssh_channel_open_session(m_channel);
+    if (rc != SSH_OK) {
+      ssh_channel_free(m_channel);
+      m_channel = nullptr;
+      return rc;
+    }
+
+	if (preCommand.size()) {
+      m_path = preCommand + " && " + m_path;
+    }
     rc = ssh_channel_request_exec(m_channel, m_path.c_str());
     if (rc != SSH_OK)
     {
       ssh_channel_close(m_channel);
       ssh_channel_free(m_channel);
       m_channel = nullptr;
+      LOG_S(ERROR) << "error4";
       return rc;
     }
     m_isRunning = true;
     m_isValid = true;
     return true;
   }
+  //-
   return false;
 }
 
@@ -301,13 +351,13 @@ bool ssh2Process::restart() {
 
 
 std::unique_ptr<ICMakeServerTerminal> createRemoteCMakeServerTerminal(
-    std::string const &sshdir, std::string const &path,
-    std::string const &hostname, std::string const &username,
-    std::string const &password, int const port,
-    std::vector<std::pair<std::string, std::string>> const &preCommand) {
+    std::string const &sshdir, std::string const &pathBuild,
+    std::string const &pathCmake, std::string const &hostname,
+    std::string const &username, std::string const &password, int const port,
+    std::string const &preCommand) {
   auto inst = std::make_unique<ssh2Process>();
 
-  if (inst->init(sshdir, path, hostname, username, password, port, preCommand) == true) {
+  if (inst->init(sshdir,pathBuild, pathCmake, hostname, username, password, port, preCommand) == true) {
     return inst;
   }
 

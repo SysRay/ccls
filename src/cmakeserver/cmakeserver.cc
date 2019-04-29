@@ -33,7 +33,6 @@ class CMakeServer : public clang::tooling::CompilationDatabase {
 private:
   std::unique_ptr<ICMakeServerTerminal>  m_terminal;  ///< Terminal used for the server;
   std::string const m_buildDirectory;     ///< Build directory with the cmakecache file
-  std::string const m_sourceDirectory;    ///< Normaly the cmake_home_dir from the
   std::unique_ptr<std::thread> m_worker;  ///< Thread  for the cmakeserver handling
   
   /// Thread function
@@ -52,10 +51,9 @@ private:
 
 public:
   CMakeServer(std::string const &pathCache, std::string const &buildDirectory,
-              std::string const &sourceDirectory,
               std::unique_ptr<ICMakeServerTerminal> terminal)
       : m_terminal(std::move(terminal)), m_buildDirectory(buildDirectory),
-        m_sourceDirectory(sourceDirectory), m_pathCache(pathCache) {
+       m_pathCache(pathCache) {
 
     std::lock_guard<std::mutex> lock(m_mtxInterface);
 
@@ -234,7 +232,7 @@ void CMakeServer::workerFunction() {
             // Send Handshake
             m_terminal->write_blocking(CMAKE_SERVER_COMMAND_HANDSHAKE(
                 m_versionMajor, m_versionMinor, m_buildDirectory,
-                m_sourceDirectory));
+                m_terminal->getPathCode()));
 
             found = true;
             break;
@@ -362,10 +360,9 @@ void CMakeServer::workerFunction() {
 std::unique_ptr<clang::tooling::CompilationDatabase> createCMakeServer(
                   std::string const pathCache,
                   std::string const &buildDirectory,
-                  std::string const &sourceDirectory,
                   std::unique_ptr<ICMakeServerTerminal> terminal) 
 {
-  return std::make_unique<CMakeServer>(pathCache, buildDirectory, sourceDirectory, std::move(terminal));
+  return std::make_unique<CMakeServer>(pathCache, buildDirectory, std::move(terminal));
 }
 
 namespace {
@@ -437,19 +434,26 @@ std::unordered_map<std::string, clang::tooling::CompileCommand> extract(rapidjso
                                 std::back_inserter(args));
                     }
 
+                    if (fileGroup.HasMember("language")) {
+                      std::string const language = fileGroup["language"].GetString();
+                      if (language == "C") {
+                        args.push_back("-xc");
+                      } else if (language == "CXX") {
+                        args.push_back("-xc++");
+					  }
+					}
+
                     if (fileGroup.HasMember("defines") && fileGroup["defines"].IsArray()) {
                       for (auto &item : fileGroup["defines"].GetArray()) {
                         args.push_back("-D" + std::string(item.GetString()));
                       }
                     }
 
-                    if (fileGroup.HasMember("includePath") &&
-                        fileGroup["includePath"].IsArray()) {
+                    if (fileGroup.HasMember("includePath") && fileGroup["includePath"].IsArray()) {
                       for (auto &item : fileGroup["includePath"].GetArray()) {
                         auto const tempPath = std::string(item["path"].GetString());
 
-                        if (item.HasMember("isSystem") &&
-                            item["isSystem"].GetBool() == true) {
+                        if (item.HasMember("isSystem") && item["isSystem"].GetBool() == true) {
                           args.push_back("-isystem" + tempPath);
                         } else {
                           args.push_back("-I" + tempPath);
@@ -463,9 +467,11 @@ std::unordered_map<std::string, clang::tooling::CompileCommand> extract(rapidjso
                         continue;
 
                       clang::tooling::CompileCommand tempTarget;
-                      tempTarget.Directory = sourceDirectory;
+                      tempTarget.Directory = std::string(target["buildDirectory"].GetString());
                       tempTarget.CommandLine = args;
-                      tempTarget.Filename = source.GetString();
+                      tempTarget.Filename =
+                              target["sourceDirectory"].GetString()
+                              + std::string("/") +  source.GetString();
 
                       files[tempTarget.Filename] = std::move(tempTarget);
                     }
