@@ -25,6 +25,14 @@ endif()
 
 ### Compile options
 
+# CMake default compile flags:
+# MSVC + Clang(Windows):
+#   debug: /MDd /Zi /Ob0 /Od /RTC1
+#   release: /MD /O2 /Ob2 /DNDEBUG
+# GCC + Clang(Linux):
+#   debug: -g
+#   release: -O3 -DNDEBUG
+
 # Enable C++17 (Required)
 set_property(TARGET ccls PROPERTY CXX_STANDARD 17)
 set_property(TARGET ccls PROPERTY CXX_STANDARD_REQUIRED ON)

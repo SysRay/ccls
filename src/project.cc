@@ -100,9 +100,8 @@ struct ProjectProcessor {
   }
 
   bool ExcludesArg(StringRef arg) {
-    return exclude_args.count(arg) ||
-           any_of(exclude_globs,
-                  [&](const GlobPattern &glob) { return glob.match(arg); });
+    return exclude_args.count(arg) || any_of(exclude_globs,
+      [&](const GlobPattern &glob) { return glob.match(arg); });
   }
 
   // Expand %c %cpp ... in .ccls
@@ -177,12 +176,12 @@ struct ProjectProcessor {
     IgnoringDiagConsumer DiagC;
     IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts(new DiagnosticOptions());
     DiagnosticsEngine Diags(
-        IntrusiveRefCntPtr<DiagnosticIDs>(new DiagnosticIDs()), &*DiagOpts,
-        &DiagC, false);
+      IntrusiveRefCntPtr<DiagnosticIDs>(new DiagnosticIDs()), &*DiagOpts,
+      &DiagC, false);
 
     driver::Driver Driver(args[0], llvm::sys::getDefaultTargetTriple(), Diags);
     auto TargetAndMode =
-        driver::ToolChain::getTargetAndModeFromProgramName(args[0]);
+      driver::ToolChain::getTargetAndModeFromProgramName(args[0]);
     if (!TargetAndMode.TargetPrefix.empty()) {
       const char *arr[] = {"-target", TargetAndMode.TargetPrefix.c_str()};
       args.insert(args.begin() + 1, std::begin(arr), std::end(arr));
@@ -198,7 +197,7 @@ struct ProjectProcessor {
 
     auto CI = std::make_unique<CompilerInvocation>();
     CompilerInvocation::CreateFromArgs(*CI, CCArgs.data(),
-                                       CCArgs.data() + CCArgs.size(), Diags);
+      CCArgs.data() + CCArgs.size(), Diags);
     CI->getFrontendOpts().DisableFree = false;
     CI->getCodeGenOpts().DisableFree = false;
 
@@ -270,25 +269,25 @@ void LoadDirectoryListing(ProjectProcessor &proc, const std::string &root,
     return folder.dot_ccls[root];
   };
 
-  GetFilesInFolder(
-      root, true /*recursive*/, true /*add_folder_to_path*/,
-      [&folder, &files, &Seen](const std::string &path) {
-        std::pair<LanguageId, bool> lang = lookupExtension(path);
-        if (lang.first != LanguageId::Unknown && !lang.second) {
-          if (!Seen.count(path))
-            files.push_back(path);
-        } else if (sys::path::filename(path) == ".ccls") {
-          std::vector<const char *> args = ReadCompilerArgumentsFromFile(path);
-          folder.dot_ccls.emplace(sys::path::parent_path(path), args);
-          std::string l;
-          for (size_t i = 0; i < args.size(); i++) {
-            if (i)
-              l += ' ';
-            l += args[i];
-          }
-          LOG_S(INFO) << "use " << path << ": " << l;
-        }
-      });
+  GetFilesInFolder(root, true /*recursive*/, true /*add_folder_to_path*/,
+                   [&folder, &files, &Seen](const std::string &path) {
+                     std::pair<LanguageId, bool> lang = lookupExtension(path);
+                     if (lang.first != LanguageId::Unknown && !lang.second) {
+                       if (!Seen.count(path))
+                         files.push_back(path);
+                     } else if (sys::path::filename(path) == ".ccls") {
+                       std::vector<const char *> args = ReadCompilerArgumentsFromFile(path);
+                       folder.dot_ccls.emplace(sys::path::parent_path(path).str() + '/',
+                                               args);
+                       std::string l;
+                       for (size_t i = 0; i < args.size(); i++) {
+                         if (i)
+                           l += ' ';
+                         l += args[i];
+                       }
+                       LOG_S(INFO) << "use " << path << ": " << l;
+                     }
+                   });
 
   // If the first line of .ccls is %compile_commands.json, append extra flags.
   for (auto &e : folder.entries)
