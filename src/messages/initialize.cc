@@ -265,7 +265,56 @@ void *Indexer(void *arg_) {
   pipeline::ThreadLeave();
   return nullptr;
 }
+void getCMakeServerConfig( Config::CmakeServerConfig &config, std::string_view configData) {
+  rapidjson::Document document;
+  document.Parse(configData.data());
+
+  if (document.FindMember("cmakePath") != document.MemberEnd()) {
+    config.cmakePath = document["cmakePath"].GetString();
+  }
+
+  if (document.FindMember("runCmakeLocal") != document.MemberEnd()) {
+    config.runCmakeLocal = document["runCmakeLocal"].GetBool();
+
+    if (!config.runCmakeLocal) {
+      if (document.FindMember("username") != document.MemberEnd()) {
+        config.user = document["username"].GetString();
+      } else {
+        LOG_S(ERROR) << "username not set in .cmakeServerConfig!";
+        return ;
+      }
+      if (document.FindMember("remoteName") != document.MemberEnd()) {
+        config.server = document["remoteName"].GetString();
+      } else {
+        LOG_S(ERROR) << "remoteName not set in .cmakeServerConfig!";
+        return;
+      }
+
+      if (document.FindMember("sshDir") != document.MemberEnd()) {
+        config.sshDir = document["sshDir"].GetString();
+      } else {
+        LOG_S(ERROR) << "sshDir not set in .cmakeServerConfig!";
+        return;
+      }
+    }
+  }
+
+  if (document.FindMember("cmakeBuildDir") != document.MemberEnd()) {
+    config.cmakeBuildDir = document["cmakeBuildDir"].GetString();
+  } else {
+    LOG_S(ERROR) << "cmakeBuildDir not set in .cmakeServerConfig!";
+    return;
+  }
+
+  if (document.FindMember("preCommand") != document.MemberEnd()) {
+    config.preCommand = document["preCommand"].GetString();
+  }
+
+  config._isValid = true;
+}
 } // namespace
+
+
 
 void Initialize(MessageHandler *m, InitializeParam &param, ReplyOnce &reply) {
   std::string project_path = NormalizePath(param.rootUri->GetPath());
@@ -287,6 +336,9 @@ void Initialize(MessageHandler *m, InitializeParam &param, ReplyOnce &reply) {
         }
       }
     }
+    auto file = ccls::ReadContent(".vscode/CMakeServerConfig.json");
+    if (file)
+      getCMakeServerConfig(g_config->cmakesServerConfig, *file);
 
     rapidjson::StringBuffer output;
     rapidjson::Writer<rapidjson::StringBuffer> writer(output);
@@ -298,7 +350,9 @@ void Initialize(MessageHandler *m, InitializeParam &param, ReplyOnce &reply) {
       SmallString<256> Path(g_config->cache.directory);
       sys::fs::make_absolute(project_path, Path);
       // Use upper case for the Driver letter on Windows.
-      g_config->cache.directory = NormalizePath(Path.str());
+      g_config->cache.directory =
+          NormalizePath(Path.str()) + "/" +
+          std::to_string(HashUsr(g_config->cmakesServerConfig.cmakeBuildDir));
       EnsureEndsInSlash(g_config->cache.directory);
     }
   }

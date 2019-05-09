@@ -340,56 +340,6 @@ struct CMakeServerConfig {
   bool _isValid = false;
 };
 
-static CMakeServerConfig getCMakeServerConfig(std::string_view configData) {
-  CMakeServerConfig ret;
-  rapidjson::Document document;
-  document.Parse(configData.data());
-
-  if (document.FindMember("cmakePath") != document.MemberEnd()) {
-    ret.cmakePath = document["cmakePath"].GetString();
-  }
-
-  if (document.FindMember("runCmakeLocal") != document.MemberEnd()) {
-    ret.runCmakeLocal = document["runCmakeLocal"].GetBool();
-
-    if (!ret.runCmakeLocal) {
-      if (document.FindMember("username") != document.MemberEnd()) {
-        ret.user = document["username"].GetString();
-      } else {
-        LOG_S(ERROR) << "username not set in .cmakeServerConfig!";
-        return {};
-      }
-      if (document.FindMember("remoteName") != document.MemberEnd()) {
-        ret.server = document["remoteName"].GetString();
-      } else {
-        LOG_S(ERROR) << "remoteName not set in .cmakeServerConfig!";
-        return {};
-      }
-
-      if (document.FindMember("sshDir") != document.MemberEnd()) {
-        ret.sshDir = document["sshDir"].GetString();
-      } else {
-        LOG_S(ERROR) << "sshDir not set in .cmakeServerConfig!";
-        return {};
-      }
-    }
-  }
-
-  if (document.FindMember("cmakeBuildDir") != document.MemberEnd()) {
-    ret.cmakeBuildDir = document["cmakeBuildDir"].GetString();
-  } else {
-    LOG_S(ERROR) << "cmakeBuildDir not set in .cmakeServerConfig!";
-    return {};
-  }
-
-  if (document.FindMember("preCommand") != document.MemberEnd()) {
-    ret.preCommand = document["preCommand"].GetString();
-  }
-
-  ret._isValid = true;
-  return ret;
-}
-
 void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
   SmallString<256> CDBDir, Path, StdinPath;
   std::string err_msg;
@@ -444,11 +394,8 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
 
   std::unique_ptr<tooling::CompilationDatabase> CDB;
 
-  auto file = ccls::ReadContent(".vscode/CMakeServerConfig.json");
-  if (file) {
-    auto settings = getCMakeServerConfig(*file);
-    if (!settings._isValid)
-      return;
+  if (g_config->cmakesServerConfig._isValid) {
+    auto &settings = g_config->cmakesServerConfig;
 
     std::unique_ptr<ICMakeServerTerminal> terminal;
     

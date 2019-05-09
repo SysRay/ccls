@@ -41,6 +41,18 @@ struct Config {
   // Directory containing compile_commands.json.
   std::string compilationDatabaseDirectory;
 
+  struct CmakeServerConfig {
+    std::string cmakePath;
+    bool runCmakeLocal;
+    std::string cmakeHomeDir;
+    std::string cmakeBuildDir;
+    std::string user;
+    std::string server;
+    std::string sshDir;
+    std::string preCommand;
+    bool _isValid = false;
+  }cmakesServerConfig;
+
   struct Cache {
     // Cache directory for indexed files, either absolute or relative to the
     // project root.
