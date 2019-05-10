@@ -23,8 +23,11 @@ void DoPathMapping(std::string &arg) {
     auto colon = mapping.find('>');
     if (colon != std::string::npos) {
         auto p = arg.find(mapping.substr(0, colon));
-        if (p != std::string::npos)
-            arg.replace(p, colon, mapping.substr(colon + 1));
+      if (p != std::string::npos) {
+		arg.replace(p, colon, mapping.substr(colon + 1));
+        break;
+      }
+            
     } else {
       // Deprecated: Use only for older settings
       auto colon = mapping.find(':');
