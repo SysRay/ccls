@@ -473,10 +473,15 @@ std::unordered_map<std::string, clang::tooling::CompileCommand> extract(rapidjso
                       clang::tooling::CompileCommand tempTarget;
                       tempTarget.Directory = std::string(target["buildDirectory"].GetString());
                       tempTarget.CommandLine = args;
-                      tempTarget.Filename =
-                              target["sourceDirectory"].GetString()
-                              + std::string("/") +  source.GetString();
 
+					  //check if file is absolute
+                      if (source.GetString()[0] == '/' ||
+                          source.GetString()[1] == ':')
+                        tempTarget.Filename = source.GetString();
+						else tempTarget.Filename =
+                            target["sourceDirectory"].GetString() +
+                            std::string("/") + source.GetString();
+                      
                       files[tempTarget.Filename] = std::move(tempTarget);
                     }
                   }
