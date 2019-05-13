@@ -50,6 +50,7 @@ struct Config {
     std::string server;
     std::string sshDir;
     std::string preCommand;
+    std::string cmakeArguments;
     bool _isValid = false;
   }cmakesServerConfig;
 

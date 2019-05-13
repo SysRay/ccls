@@ -14,5 +14,7 @@
 /// @param Path for buildDirectory
 /// @param Path for sourceDirectory
 /// @param Pass the terminal to cmakeserver
-std::unique_ptr<clang::tooling::CompilationDatabase> createCMakeServer(
-    std::string const pathCache, std::string const &buildDirectory, std::unique_ptr<ICMakeServerTerminal> terminal);
+std::unique_ptr<clang::tooling::CompilationDatabase> createCMakeServer(std::string const &pathCache,
+                  std::string const &buildDirectory,
+                  std::string const &cacheArguments,
+                  std::unique_ptr<ICMakeServerTerminal> terminal);

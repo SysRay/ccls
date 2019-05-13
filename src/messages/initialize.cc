@@ -310,6 +310,10 @@ void getCMakeServerConfig( Config::CmakeServerConfig &config, std::string_view c
     config.preCommand = document["preCommand"].GetString();
   }
 
+  if (document.FindMember("cmakeArguments") != document.MemberEnd()) {
+    config.cmakeArguments = document["cmakeArguments"].GetString();
+  }
+
   config._isValid = true;
 }
 } // namespace

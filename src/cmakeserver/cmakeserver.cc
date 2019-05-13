@@ -33,6 +33,7 @@ class CMakeServer : public clang::tooling::CompilationDatabase {
 private:
   std::unique_ptr<ICMakeServerTerminal>  m_terminal;  ///< Terminal used for the server;
   std::string const m_buildDirectory;     ///< Build directory with the cmakecache file
+  std::string const m_cacheArguments;
   std::unique_ptr<std::thread> m_worker;  ///< Thread  for the cmakeserver handling
   
   /// Thread function
@@ -51,8 +52,10 @@ private:
 
 public:
   CMakeServer(std::string const &pathCache, std::string const &buildDirectory,
+              std::string const &cacheArguments,
               std::unique_ptr<ICMakeServerTerminal> terminal)
       : m_terminal(std::move(terminal)), m_buildDirectory(buildDirectory),
+        m_cacheArguments(cacheArguments),
        m_pathCache(pathCache) {
 
     std::lock_guard<std::mutex> lock(m_mtxInterface);
@@ -257,7 +260,7 @@ void CMakeServer::workerFunction() {
         assert(document.HasMember("inReplyTo"));
         if (std::string(document["inReplyTo"].GetString()).compare("handshake") == 0) {
           LOG_S(INFO) << "[CMakeServer] --> configuring ...";
-          m_terminal->write_blocking(CMAKE_SERVER_COMMAND_CONFIGURE);
+          m_terminal->write_blocking(CMAKE_SERVER_COMMAND_CONFIGURE(m_cacheArguments));
         }else if (std::string(document["inReplyTo"].GetString()).compare("configure") == 0) {
           LOG_S(INFO) << "[CMakeServer]  <- Configuring done!";
 
@@ -358,11 +361,12 @@ void CMakeServer::workerFunction() {
 
 // Factory for CMakeServer
 std::unique_ptr<clang::tooling::CompilationDatabase> createCMakeServer(
-                  std::string const pathCache,
+                  std::string const &pathCache,
                   std::string const &buildDirectory,
+                  std::string const &cacheArguments,
                   std::unique_ptr<ICMakeServerTerminal> terminal) 
 {
-  return std::make_unique<CMakeServer>(pathCache, buildDirectory, std::move(terminal));
+  return std::make_unique<CMakeServer>(pathCache, buildDirectory, cacheArguments, std::move(terminal));
 }
 
 namespace {
