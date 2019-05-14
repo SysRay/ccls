@@ -410,7 +410,7 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
           settings.preCommand);
 
     CDB = createCMakeServer(".vscode/CMakeServerCache.json",
-                            settings.cmakeBuildDir, std::move(terminal));
+                            settings.cmakeBuildDir, settings.cmakeArguments, std::move(terminal));
   } else {
     CDB = tooling::CompilationDatabase::loadFromDirectory(CDBDir, err_msg);
     if (CDB)
