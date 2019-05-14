@@ -153,6 +153,9 @@ void FilterCandidates(CompletionList &result, const std::string &complete_text,
                                 begin_pos.character - overwrite_len};
     std::string sort(4, ' ');
     for (auto &item : items) {
+      if (item.textEdit.newText.back() == '"')
+        item.textEdit.newText.pop_back();
+
       item.textEdit.range = lsRange{begin_pos, end_pos};
       if (has_open_paren)
         item.textEdit.newText = item.filterText;
