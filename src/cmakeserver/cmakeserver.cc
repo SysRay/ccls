@@ -187,7 +187,11 @@ void CMakeServer::workerFunction() {
       // Parse json
       rapidjson::Document document;
       document.Parse(message.data());
-
+      if (document.HasParseError()) {
+        LOG_S(INFO) << "Couldn't parse cmake-server message: " << document.GetParseError();
+        LOG_S(INFO) << message.data();
+        continue;
+	  }
       assert(document.IsObject());
       assert(document.HasMember("type"));
 
