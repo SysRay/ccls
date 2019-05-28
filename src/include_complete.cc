@@ -95,7 +95,7 @@ IncludeComplete::~IncludeComplete() {
 }
 
 void IncludeComplete::Rescan() {
-  if (is_scanning || LLVM_VERSION_MAJOR >= 8)
+  if (is_scanning)
     return;
 
   completion_items.clear();
@@ -127,7 +127,8 @@ void IncludeComplete::Rescan() {
                            bool ok = include_cpp;
                            for (StringRef suffix :
                                 g_config->completion.include.suffixWhitelist)
-                             if (StringRef(path).endswith(suffix))
+                             if (path.find('.') == std::string::npos ||
+                                 StringRef(path).endswith(suffix))
                                ok = true;
                            if (!ok)
                              return;

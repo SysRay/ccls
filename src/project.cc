@@ -141,7 +141,7 @@ struct ProjectProcessor {
   }
 
   void GetSearchDirs(Project::Entry &entry) {
-#if LLVM_VERSION_MAJOR < 8
+//#if LLVM_VERSION_MAJOR < 8
     const std::string base_name = sys::path::filename(entry.filename);
     size_t hash = std::hash<std::string>{}(entry.directory);
     bool OPT_o = false;
@@ -218,7 +218,7 @@ struct ProjectProcessor {
         break;
       }
     }
-#endif
+//#endif
   }
 };
 
