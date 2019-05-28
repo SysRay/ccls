@@ -131,10 +131,13 @@ void MessageHandler::textDocument_codeLens(TextDocumentParam &param,
       std::vector<Use> base_uses = GetUsesForAllBases(db, func);
       std::vector<Use> derived_uses = GetUsesForAllDerived(db, func);
 
-      if (def->bases.size()) {
-        auto const baseNameS = db->Func(def->bases[0]).AnyDef()->Name(true);
-        std::string baseName(baseNameS.substr(0, baseNameS.find_last_of("::")-1)); 
-
+      if (def->bases.size() && db->HasFunc(def->bases[0]) && db->Func(def->bases[0]).AnyDef() != nullptr) {
+        std::string const baseNameS = db->Func(def->bases[0]).AnyDef()->detailed_name;
+        std::string baseName(baseNameS.substr(0, baseNameS.find_first_of('('))); 
+		if (std::count(baseName.begin(),baseName.end(),':') > 1 ) {
+          baseName = (baseName.substr(baseName.find_last_of(':') + 1 )); 
+		}
+		
         Add(baseName.c_str(), {sym.usr, Kind::Func, "bases"}, sym.range,
             def->bases.size());
       }
