@@ -189,8 +189,7 @@ void MessageHandler::textDocument_codeLens(TextDocumentParam &param,
       auto def = type.AnyDef();
       if (def == nullptr || def->kind != ccls::SymbolKind::Class)
         continue;
-      LOG_S(INFO) << "cl: " << def->detailed_name;
-      
+      /*
       TextDocumentUML temp;
       temp.classDetailed = def->detailed_name;
 
@@ -232,6 +231,7 @@ void MessageHandler::textDocument_codeLens(TextDocumentParam &param,
         temp.memberFunctions.push_back(method);
       }
        CodeVisualizer::EmitClass(&temp);
+       */
     }
   }
 }
