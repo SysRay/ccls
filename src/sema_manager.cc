@@ -253,9 +253,21 @@ public:
     DiagnosticConsumer::HandleDiagnostic(Level, Info);
     SourceLocation L = Info.getLocation();
     if (!L.isValid()) return;
-    const SourceManager &SM = Info.getSourceManager();
-    StringRef Filename = SM.getFilename(Info.getLocation());
-    bool concerned = SM.isWrittenInMainFile(L);
+    SourceManager &SM = Info.getSourceManager();
+    StringRef Filename;
+    bool concerned = false;
+
+    if (L.isMacroID()) {
+      auto const temp = L.printToString(SM);
+      Filename = {temp.substr(0, temp.find_first_of(':', 2))};
+      if (const FileEntry *F = SM.getFileEntryForID(SM.getMainFileID())) {
+        concerned = Filename == F->getName().str();
+      }
+    } else {
+      Filename = SM.getFilename(Info.getLocation());
+      concerned = SM.isWrittenInMainFile(L);
+    }
+
     auto fillDiagBase = [&](DiagBase &d) {
       llvm::SmallString<64> Message;
       Info.FormatDiagnostic(Message);
@@ -353,7 +365,6 @@ void BuildPreamble(Session &session, CompilerInvocation &CI,
   std::unique_ptr<llvm::MemoryBuffer> Buf =
       llvm::MemoryBuffer::getMemBuffer(content);
 
-  
   auto Bounds = ComputePreambleBounds(*CI.getLangOpts(), Buf.get(), 0);
 
   if (!task.from_diag && OldP &&
@@ -375,13 +386,11 @@ void BuildPreamble(Session &session, CompilerInvocation &CI,
   if (OldP) {
     std::lock_guard lock(session.wfiles->mutex);
     for (auto &include : OldP->includes) {
- if (WorkingFile *wf = session.wfiles->GetFileUnlocked(include.first))
+      if (WorkingFile *wf = session.wfiles->GetFileUnlocked(include.first))
         CI.getPreprocessorOpts().addRemappedFile(
             include.first,
             llvm::MemoryBuffer::getMemBufferCopy(wf->buffer_content).release());
     }
-
-     
   }
 
   CclsPreambleCallbacks PC;
@@ -472,7 +481,7 @@ void *CompletionMain(void *manager_) {
         BuildCompilerInvocation(task->path, session->file.args, FS);
     if (!CI)
       continue;
-    
+
     auto &FOpts = CI->getFrontendOpts();
     FOpts.CodeCompleteOpts = task->CCOpts;
     FOpts.CodeCompletionAt.FileName = task->path;
@@ -483,7 +492,7 @@ void *CompletionMain(void *manager_) {
 
     DiagnosticConsumer DC;
     std::string content = manager->wfiles->GetContent(task->path);
-   
+
     auto Buf = llvm::MemoryBuffer::getMemBuffer(content);
     /*
     session->openFiles.clear();
@@ -515,8 +524,6 @@ void *CompletionMain(void *manager_) {
                                        preamble.get(), task->path, Buf);
     if (!Clang)
       continue;
-
-
 
     Clang->getPreprocessorOpts().SingleFileParseMode = in_preamble;
     Clang->setCodeCompletionConsumer(task->Consumer.release());
@@ -744,7 +751,6 @@ void SemaManager::OnView(const std::string &path) {
     temp.from_diag = true;
     preamble_tasks.PushBack(std::move(temp), true);
   }
-   
 }
 
 void SemaManager::OnSave(const std::string &path) {
@@ -774,7 +780,7 @@ SemaManager::EnsureSession(const std::string &path, bool *created) {
     if (created)
       *created = true;
 
-     preamble_tasks.PushBack(PreambleTask{path}, true);
+    preamble_tasks.PushBack(PreambleTask{path}, true);
   }
   return session;
 }
