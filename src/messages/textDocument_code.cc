@@ -23,8 +23,8 @@ limitations under the License.
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
 
-#include <unordered_set>
 #include "log.hh"
+#include <unordered_set>
 namespace ccls {
 namespace {
 struct CodeAction {
@@ -33,7 +33,7 @@ struct CodeAction {
   WorkspaceEdit edit;
 };
 REFLECT_STRUCT(CodeAction, title, kind, edit);
-}
+} // namespace
 void MessageHandler::textDocument_codeAction(CodeActionParam &param,
                                              ReplyOnce &reply) {
   WorkingFile *wf = FindOrFail(param.textDocument.uri.GetPath(), reply).second;
@@ -78,8 +78,7 @@ REFLECT_STRUCT(Cmd_xref, usr, kind, field);
 REFLECT_STRUCT(Command, title, command, arguments);
 REFLECT_STRUCT(CodeLens, range, command);
 
-template <typename T>
-std::string ToString(T &v) {
+template <typename T> std::string ToString(T &v) {
   rapidjson::StringBuffer output;
   rapidjson::Writer<rapidjson::StringBuffer> writer(output);
   JsonWriter json_writer(&writer);
@@ -131,13 +130,15 @@ void MessageHandler::textDocument_codeLens(TextDocumentParam &param,
       std::vector<Use> base_uses = GetUsesForAllBases(db, func);
       std::vector<Use> derived_uses = GetUsesForAllDerived(db, func);
 
-      if (def->bases.size() && db->HasFunc(def->bases[0]) && db->Func(def->bases[0]).AnyDef() != nullptr) {
-        std::string const baseNameS = db->Func(def->bases[0]).AnyDef()->detailed_name;
-        std::string baseName(baseNameS.substr(0, baseNameS.find_first_of('('))); 
-		if (std::count(baseName.begin(),baseName.end(),':') > 1 ) {
-          baseName = (baseName.substr(baseName.find_last_of(':') + 1 )); 
-		}
-		
+      if (def->bases.size() && db->HasFunc(def->bases[0]) &&
+          db->Func(def->bases[0]).AnyDef() != nullptr) {
+        std::string const baseNameS =
+            db->Func(def->bases[0]).AnyDef()->detailed_name;
+        std::string baseName(baseNameS.substr(0, baseNameS.find_first_of('(')));
+        if (std::count(baseName.begin(), baseName.end(), ':') > 1) {
+          baseName = (baseName.substr(baseName.find_last_of(':') + 1));
+        }
+
         Add(baseName.c_str(), {sym.usr, Kind::Func, "bases"}, sym.range,
             def->bases.size());
       }
@@ -179,6 +180,60 @@ void MessageHandler::textDocument_codeLens(TextDocumentParam &param,
   }
 
   reply(result);
+
+  std::unordered_set<ccls::Usr> seen2;
+  for (auto [sym, refcnt] : file->symbol2refcnt) {
+    if (seen2.insert(sym.usr).second &&  sym.kind == Kind::Type) {
+      QueryType &type = db->GetType(sym);
+
+      auto def = type.AnyDef();
+      if (def == nullptr || def->kind != ccls::SymbolKind::Class)
+        continue;
+      LOG_S(INFO) << "cl: " << def->detailed_name;
+      
+      TextDocumentUML temp;
+      temp.classDetailed = def->detailed_name;
+
+      temp.uri = std::to_string(def->file_id);
+      for (auto &i : def->funcs) {
+        auto& item = db->Func(i);
+        auto methodDef = item.AnyDef();
+        if (methodDef == nullptr)
+          continue;
+
+        std::string method;
+
+        if (methodDef->bases.size() > 0)
+          method += "{abstract} ";
+        else if (std::string(methodDef->detailed_name).find("static") !=
+                 std::string::npos)
+          method += "{static} ";
+
+        switch (item.accessSpecifer) {
+        case clang::AccessSpecifier::AS_private :
+          method += "-";
+          break;
+        case clang::AccessSpecifier::AS_public :
+          method += "+";
+          break;
+        case clang::AccessSpecifier::AS_protected :
+          method += "#";
+          break;
+        default:
+          break;
+        }
+        
+        method += std::string(methodDef->Name(false));
+        auto it = std::string(methodDef->detailed_name).find_first_of("(");
+        if (it != std::string::npos) {
+          method += std::string(methodDef->detailed_name).substr(it);
+        }
+        
+        temp.memberFunctions.push_back(method);
+      }
+       CodeVisualizer::EmitClass(&temp);
+    }
+  }
 }
 
 void MessageHandler::workspace_executeCommand(JsonReader &reader,

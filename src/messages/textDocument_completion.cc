@@ -24,9 +24,9 @@ limitations under the License.
 #include <clang/Sema/CodeCompleteConsumer.h>
 #include <clang/Sema/Sema.h>
 
-//#if LLVM_VERSION_MAJOR < 8
+#if LLVM_VERSION_MAJOR < 8
 #include <regex>
-//#endif
+#endif
 
 namespace ccls {
 using namespace clang;
@@ -59,7 +59,7 @@ struct CompletionList {
 };
 REFLECT_STRUCT(CompletionList, isIncomplete, items);
 
-//#if LLVM_VERSION_MAJOR < 8
+#if LLVM_VERSION_MAJOR < 8
 void DecorateIncludePaths(const std::smatch &match,
                           std::vector<CompletionItem> *items,
                           char quote) {
@@ -106,7 +106,7 @@ ParseIncludeLineResult ParseIncludeLine(const std::string &line) {
   bool ok = std::regex_match(line, match, pattern);
   return {ok, match[3], match[5], match[6], match};
 }
-//#endif
+#endif
 
 // Pre-filters completion responses before sending to vscode. This results in a
 // significantly snappier completion experience as vscode is easily overloaded
@@ -538,7 +538,7 @@ void MessageHandler::textDocument_completion(CompletionParam &param,
   Position begin_pos =
       wf->GetCompletionPosition(param.position, &filter, &end_pos);
 
-//#if LLVM_VERSION_MAJOR < 8
+#if LLVM_VERSION_MAJOR < 8
   ParseIncludeLineResult preprocess = ParseIncludeLine(buffer_line);
   if (preprocess.ok && preprocess.keyword.compare("include") == 0) {
     CompletionList result;
@@ -561,7 +561,7 @@ void MessageHandler::textDocument_completion(CompletionParam &param,
     reply(result);
     return;
   }
-//#endif
+#endif
 
   SemaManager::OnComplete callback =
       [filter, path, begin_pos, end_pos, reply,
