@@ -143,7 +143,6 @@ void MessageHandler::textDocument_codeLens(TextDocumentParam &param,
           baseNameS = baseNameS.substr(baseNameS.find_last_of(':') +1);
         }
 
-        LOG_S(INFO) << "base: " << baseNameS << "  " << baseNameS.data();
         Add(baseNameS.data(), {sym.usr, Kind::Func, "bases"}, sym.range,
             def->bases.size());
       }

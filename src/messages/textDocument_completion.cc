@@ -13,20 +13,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "fuzzy_match.hh"
 #include "include_complete.hh"
 #include "log.hh"
 #include "message_handler.hh"
 #include "pipeline.hh"
 #include "sema_manager.hh"
 #include "working_files.hh"
-
+#include <limits>
 #include <clang/Sema/CodeCompleteConsumer.h>
 #include <clang/Sema/Sema.h>
 
 #if LLVM_VERSION_MAJOR < 8
 #include <regex>
 #endif
+
+#define FTS_FUZZY_MATCH_IMPLEMENTATION // create declarations in this tu
+#include "fts_fuzzy_match.hh"
 
 namespace ccls {
 using namespace clang;
@@ -192,18 +194,14 @@ void FilterCandidates(CompletionList &result, const std::string &complete_text,
 
   if (complete_text.size()) {
     // Fuzzy match and remove awful candidates.
-    bool sensitive = g_config->completion.caseSensitivity;
-    FuzzyMatcher fuzzy(complete_text, sensitive);
     for (CompletionItem &item : items) {
       const std::string &filter =
           item.filterText.size() ? item.filterText : item.label;
-      item.score_ = ReverseSubseqMatch(complete_text, filter, sensitive) >= 0
-                        ? fuzzy.Match(filter, true)
-                        : FuzzyMatcher::kMinScore;
+      (void)fts::fuzzy_match(complete_text.data(), filter.data(), item.score_);
     }
     items.erase(std::remove_if(items.begin(), items.end(),
                                [](const CompletionItem &item) {
-                                 return item.score_ <= FuzzyMatcher::kMinScore;
+                                 return item.score_ <= 0.5 * std::numeric_limits<int>::min();
                                }),
                 items.end());
   }

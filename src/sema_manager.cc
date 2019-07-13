@@ -775,7 +775,7 @@ SemaManager::EnsureSession(const std::string &path, bool *created) {
       for (auto &arg : session->file.args)
         (line += ' ') += arg;
     }
-    LOG_S(INFO) << "create session for " << path << line;
+    LOG_S(INFO) << "create session for " << path  << " tu: " << session->file.tuFile << " "<< line;
     sessions.Insert(path, session);
     if (created)
       *created = true;

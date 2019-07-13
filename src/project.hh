@@ -38,6 +38,7 @@ struct Project {
     std::string root;
     std::string directory;
     std::string filename;
+    std::string tuFile;
     std::vector<const char *> args;
     // If true, this entry is inferred and was not read from disk.
     bool is_inferred = false;
