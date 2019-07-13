@@ -297,4 +297,6 @@ private:
 void EmitSkippedRanges(WorkingFile *wfile, QueryFile &file);
 
 void EmitSemanticHighlight(DB *db, WorkingFile *wfile, QueryFile &file);
+
+void EmitConfigurationChanged();
 } // namespace ccls

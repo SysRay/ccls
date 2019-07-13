@@ -808,9 +808,11 @@ void NotifyOrRequest(const char *method, bool request,
     w.Key("id");
     w.Int64(request_id.fetch_add(1, std::memory_order_relaxed));
   }
-  w.Key("params");
-  JsonWriter writer(&w);
-  fn(writer);
+  if (fn){
+    w.Key("params");
+    JsonWriter writer(&w);
+    fn(writer);
+  }
   w.EndObject();
   LOG_V(2) << (request ? "RequestMessage: " : "NotificationMessage: ") << method;
   for_stdout->PushBack(output.GetString());

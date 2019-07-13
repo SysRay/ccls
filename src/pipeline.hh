@@ -54,11 +54,13 @@ void Index(const std::string &path, const std::vector<const char *> &args,
            IndexMode mode, bool must_exist, RequestId id = {});
 void RemoveCache(const std::string &path);
 std::optional<std::string> LoadIndexedContent(const std::string& path);
-
 void NotifyOrRequest(const char *method, bool request,
                      const std::function<void(JsonWriter &)> &fn);
 template <typename T> void Notify(const char *method, T &result) {
   NotifyOrRequest(method, false, [&](JsonWriter &w) { Reflect(w, result); });
+}
+inline void Notify(const char *method) {
+  NotifyOrRequest(method, false, nullptr);
 }
 template <typename T> void Request(const char *method, T &result) {
   NotifyOrRequest(method, true, [&](JsonWriter &w) { Reflect(w, result); });

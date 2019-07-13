@@ -132,14 +132,19 @@ void MessageHandler::textDocument_codeLens(TextDocumentParam &param,
 
       if (def->bases.size() && db->HasFunc(def->bases[0]) &&
           db->Func(def->bases[0]).AnyDef() != nullptr) {
-        std::string const baseNameS =
-            db->Func(def->bases[0]).AnyDef()->detailed_name;
-        std::string baseName(baseNameS.substr(0, baseNameS.find_first_of('(')));
-        if (std::count(baseName.begin(), baseName.end(), ':') > 1) {
-          baseName = (baseName.substr(baseName.find_last_of(':') + 1));
+        std::string baseNameS = {db->Func(def->bases[0]).AnyDef()->Name(true).data()};
+
+        baseNameS = baseNameS.substr(0, baseNameS.find_first_of('('));
+        
+        if (std::count(baseNameS.begin(), baseNameS.end(), ':') > 2) {
+          baseNameS =  baseNameS.substr(0, baseNameS.find_last_of(':')-1);
+        }
+        if (std::count(baseNameS.begin(), baseNameS.end(), ':') > 2) {
+          baseNameS = baseNameS.substr(baseNameS.find_last_of(':') +1);
         }
 
-        Add(baseName.c_str(), {sym.usr, Kind::Func, "bases"}, sym.range,
+        LOG_S(INFO) << "base: " << baseNameS << "  " << baseNameS.data();
+        Add(baseNameS.data(), {sym.usr, Kind::Func, "bases"}, sym.range,
             def->bases.size());
       }
       Add("ref", {sym.usr, Kind::Func, "uses"}, sym.range, func.uses.size(),

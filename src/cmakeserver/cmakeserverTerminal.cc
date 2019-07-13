@@ -7,9 +7,11 @@
 #include "log.hh"
 #include "utils.hh"
 
-#include <atlstr.h>  // windows
-#include <windows.h> // windows
+#include <filesystem>
+#include <atlstr.h> // windows
 #include <string>
+#include <windows.h> // windows
+
 
 class consoleProcess : public ICMakeServerTerminal {
 private:
@@ -24,16 +26,17 @@ public:
   bool write_blocking(std::string const &) final;
   bool write_blocking(std::string &&) final;
   bool restart() final;
-  void deinit() final { 
-    m_isValid = false; 
+  void deinit() final {
+    m_isValid = false;
     CHAR chBuf[1]{0};
-    DWORD  written;
+    DWORD written;
     WriteFile(wPipeOutput, &chBuf[0], 1, &written, NULL);
   }
 
   /// Initializes this object.
   /// @param  path        Full pathname of the cmake exe.
-  /// @param  preCommand  This command is send bevor calling cmake. (for setting env)
+  /// @param  preCommand  This command is send bevor calling cmake. (for setting
+  /// env)
   /// @return True if it succeeds, false if it fails.
   bool init(std::string const &pathBuild, std::string const &pathCmake,
             std::string const &preCommand);
@@ -81,28 +84,39 @@ bool consoleProcess::init(std::string const &pathBuild,
                           std::string const &preCommand) {
   if (m_path.empty()) {
     m_path = pathCmake;
-
-    auto file = ccls::ReadContent(pathBuild);
+    
+    auto file = ccls::ReadContent(pathBuild + "/CMakeCache.txt");
     if (file) {
-      m_pathCode = getArg(*file,"CMAKE_HOME_DIRECTORY");
+      m_pathCode = getArg(*file, "CMAKE_HOME_DIRECTORY");
       LOG_S(INFO) << "[CMakeCache] Path to code is: " << m_pathCode;
 
       if (m_path.empty()) {
         m_path = getArg(*file, "CMAKE_COMMAND");
       }
-      
+
       LOG_S(INFO) << "[CMakeCache] Path to exe is: " << m_path;
     } else {
-      LOG_S(ERROR) << "[CMakeCache] Couldn't find file: " << pathBuild;
+      LOG_S(ERROR) << "[CMakeCache] Couldn't find file: "
+                   << pathBuild << "/CMakeCache.txt";
       return false;
     }
+    
+    // Create tempfolder and save cmakefiles
+    std::error_code ec;
+    std::filesystem::create_directory(pathBuild + "/cclsTempFolder",ec);
+    std::filesystem::copy(pathBuild + "/CMakeCache.txt",
+                          pathBuild + "/cclsTempFolder/CMakeCache.txt",ec);
+
+    std::filesystem::copy(pathBuild + "/CMakeFiles",
+                          pathBuild + "/cclsTempFolder/CMakeFiles",
+                          std::filesystem::copy_options::recursive,ec);
 
     // Create pipes to write and read data
     SECURITY_ATTRIBUTES secattr;
     ZeroMemory(&secattr, sizeof(secattr));
     secattr.nLength = sizeof(secattr);
     secattr.bInheritHandle = TRUE;
-    
+
     CreatePipe(&wPipeInput, &wPipeOutput, &secattr, 0);
     CreatePipe(&rPipeOutput, &rPipeInput, &secattr, 0);
     //-
@@ -122,22 +136,21 @@ bool consoleProcess::init(std::string const &pathBuild,
     std::string temp = "cmd.exe /v /c ";
     if (preCommand.size()) {
       temp += preCommand + " && ";
-	}
+    }
     temp += "\"" + m_path + "\"" + CMAKE_PARAM_SERVERCALL;
 
     LOG_S(INFO) << temp;
     USES_CONVERSION;
     TCHAR *cmd = A2T(&temp[0]);
 
-    if (!CreateProcess( NULL, cmd, NULL, NULL, TRUE, flags, NULL, NULL, &si, &m_processInfo)) {
+    if (!CreateProcess(NULL, cmd, NULL, NULL, TRUE, flags, NULL, NULL, &si,
+                       &m_processInfo)) {
       CloseHandle(m_processInfo.hProcess);
       CloseHandle(m_processInfo.hThread);
       CloseHandle(wPipeOutput);
       CloseHandle(rPipeInput);
       return false;
     }
-    
-    
 
     m_isValid = true;
     return true;

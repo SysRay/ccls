@@ -16,5 +16,6 @@
 /// @param Pass the terminal to cmakeserver
 std::unique_ptr<clang::tooling::CompilationDatabase> createCMakeServer(std::string const &pathCache,
                   std::string const &buildDirectory,
-                  std::string const &cacheArguments,
-                  std::unique_ptr<ICMakeServerTerminal> terminal);
+                  std::string const &cacheArguments, 
+                  std::unique_ptr<ICMakeServerTerminal> terminal,
+                  std::function<void()>const& onReconfig);

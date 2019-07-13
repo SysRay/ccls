@@ -25,6 +25,8 @@ limitations under the License.
 #include "platform.hh"
 #include "utils.hh"
 #include "working_files.hh"
+#include "message_handler.hh"
+
 #include <clang/Driver/Compilation.h>
 #include <clang/Driver/Driver.h>
 #include <clang/Driver/Types.h>
@@ -100,8 +102,9 @@ struct ProjectProcessor {
   }
 
   bool ExcludesArg(StringRef arg) {
-    return exclude_args.count(arg) || any_of(exclude_globs,
-      [&](const GlobPattern &glob) { return glob.match(arg); });
+    return exclude_args.count(arg) ||
+           any_of(exclude_globs,
+                  [&](const GlobPattern &glob) { return glob.match(arg); });
   }
 
   // Expand %c %cpp ... in .ccls
@@ -176,12 +179,12 @@ struct ProjectProcessor {
     IgnoringDiagConsumer DiagC;
     IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts(new DiagnosticOptions());
     DiagnosticsEngine Diags(
-      IntrusiveRefCntPtr<DiagnosticIDs>(new DiagnosticIDs()), &*DiagOpts,
-      &DiagC, false);
+        IntrusiveRefCntPtr<DiagnosticIDs>(new DiagnosticIDs()), &*DiagOpts,
+        &DiagC, false);
 
     driver::Driver Driver(args[0], llvm::sys::getDefaultTargetTriple(), Diags);
     auto TargetAndMode =
-      driver::ToolChain::getTargetAndModeFromProgramName(args[0]);
+        driver::ToolChain::getTargetAndModeFromProgramName(args[0]);
     if (!TargetAndMode.TargetPrefix.empty()) {
       const char *arr[] = {"-target", TargetAndMode.TargetPrefix.c_str()};
       args.insert(args.begin() + 1, std::begin(arr), std::end(arr));
@@ -197,7 +200,7 @@ struct ProjectProcessor {
 
     auto CI = std::make_unique<CompilerInvocation>();
     CompilerInvocation::CreateFromArgs(*CI, CCArgs.data(),
-      CCArgs.data() + CCArgs.size(), Diags);
+                                       CCArgs.data() + CCArgs.size(), Diags);
     CI->getFrontendOpts().DisableFree = false;
     CI->getCodeGenOpts().DisableFree = false;
 
@@ -276,9 +279,10 @@ void LoadDirectoryListing(ProjectProcessor &proc, const std::string &root,
                        if (!Seen.count(path))
                          files.push_back(path);
                      } else if (sys::path::filename(path) == ".ccls") {
-                       std::vector<const char *> args = ReadCompilerArgumentsFromFile(path);
-                       folder.dot_ccls.emplace(sys::path::parent_path(path).str() + '/',
-                                               args);
+                       std::vector<const char *> args =
+                           ReadCompilerArgumentsFromFile(path);
+                       folder.dot_ccls.emplace(
+                           sys::path::parent_path(path).str() + '/', args);
                        std::string l;
                        for (size_t i = 0; i < args.size(); i++) {
                          if (i)
@@ -392,31 +396,32 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
     }
   }
 
-  std::unique_ptr<tooling::CompilationDatabase> CDB;
-
-  if (g_config->cmakesServerConfig._isValid) {
-    auto &settings = g_config->cmakesServerConfig;
+  if (g_config->cmakeServerConfig._isValid) {
+    auto &settings = g_config->cmakeServerConfig;
 
     std::unique_ptr<ICMakeServerTerminal> terminal;
-    
-   if (settings.runCmakeLocal)
+
+    if (settings.runCmakeLocal)
       terminal = createLocalCMakeServerTerminal(
-          settings.cmakeBuildDir + "/CMakeCache.txt", settings.cmakePath,
+          settings.cmakeBuildDir, settings.cmakePath,
           settings.preCommand);
     else
       terminal = createRemoteCMakeServerTerminal(
-          settings.sshDir, settings.cmakeBuildDir + "/CMakeCache.txt",
-          settings.cmakePath, settings.server, settings.user, "", 22,
+          settings.sshDir, settings.cmakeBuildDir,
+          settings.cmakePath, settings.sshServer, settings.sshUser, "", 22,
           settings.preCommand);
 
-    CDB = createCMakeServer(".vscode/CMakeServerCache.json",
-                            settings.cmakeBuildDir, settings.cmakeArguments, std::move(terminal));
+    CDB.reset(createCMakeServer(".vscode/CMakeServerCache.json",
+                                settings.cmakeBuildDir + "/cclsTempFolder", settings.cmakeArguments,
+                                std::move(terminal),
+                                ccls::EmitConfigurationChanged
+                                ).release());
   } else {
-    CDB = tooling::CompilationDatabase::loadFromDirectory(CDBDir, err_msg);
+    CDB.reset(tooling::CompilationDatabase::loadFromDirectory(CDBDir, err_msg).release());
     if (CDB)
       LOG_S(INFO) << "loaded " << Path.c_str();
-    else if (g_config->compilationDatabaseCommand.size() || 
-		sys::fs::exists(Path))
+    else if (g_config->compilationDatabaseCommand.size() ||
+             sys::fs::exists(Path))
       LOG_S(ERROR) << "failed to load " << Path.c_str();
   }
 
@@ -454,29 +459,20 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       std::vector<std::string> args = std::move(Cmd.CommandLine);
       entry.args.reserve(args.size());
       for (std::string &arg : args) {
-        if(arg.compare(0, 2, "-c") == 0 || arg.compare(0, 3, "--c") == 0) {
-			if (arg.compare(0, 2, "-c") == 0) {
-				entry.args.push_back(Intern("-Dbool=int"));
-				arg.replace(0, arg.find('c'), "-std=");
-            } else {
-                          arg = "-std=c++14";         
-			}
-           
-		}else if (arg.compare(0, 2, "-I") != 0 && arg.compare(0, 2, "-D") &&
-            arg.compare(0, 2, "-x") != 0 && arg.compare(0, 8, "-isystem") != 0)
+        if (arg.compare(0, 2, "-I") == 0 ||
+            arg.compare(0, 8, "-isystem") == 0) {
+          DoPathMapping(arg);
+        } else if (arg.compare(0, 2, "-x") == 0) {
+        
+        } else if (proc.ExcludesArg(arg) != g_config->clang.excludeArgsIsWhitelist)
           continue;
 
-        if (arg.compare(0, 2, "-I") == 0 ||
-                    arg.compare(0, 8, "-isystem") == 0) {
-          DoPathMapping(arg);
-        }
-        if (!proc.ExcludesArg(arg))
-          entry.args.push_back(Intern(arg));
+        entry.args.push_back(Intern(arg));
       }
       entry.args.push_back(Intern(entry.filename));
       if (entry.filename.empty()) {
         LOG_S(ERROR) << "Couldn't resolve: " << Cmd.Filename;
-	  }
+      }
       entry.compdb_size = entry.args.size();
 
       // Work around relative --sysroot= as it isn't affected by
@@ -493,180 +489,185 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       if (Seen.insert(entry.filename).second)
         folder.entries.push_back(entry);
     }
-  }
-
-  // Use directory listing if .ccls exists or compile_commands.json does not
-  // exist.
-  Path.clear();
-  sys::path::append(Path, root, ".ccls");
-  if (sys::fs::exists(Path))
-    LoadDirectoryListing(proc, root, Seen);
-  std::vector<const char *> extra_args;
-  for (const std::string &arg : g_config->clang.extraArgs)
-    extra_args.push_back(Intern(arg));
-  for (auto &e : folder.entries) {
-    e.args.insert(e.args.end(), extra_args.begin(), extra_args.end());
-    e.args.push_back(Intern("-working-directory=" + e.directory));
-  }
-}
-
-void Project::Load(const std::string &root) {
-  assert(root.back() == '/');
-  std::lock_guard lock(mtx);
-  Folder &folder = root2folder[root];
-
-  LoadDirectory(root, folder);
-  for (auto &[path, kind] : folder.search_dir2kind)
-    LOG_S(INFO) << "search directory: " << path << ' ' << " \"< "[kind];
-
-  // Setup project entries.
-  folder.path2entry_index.reserve(folder.entries.size());
-  for (size_t i = 0; i < folder.entries.size(); ++i) {
-    folder.entries[i].id = i;
-    folder.path2entry_index[folder.entries[i].filename] = i;
-  }
-}
-
-Project::Entry Project::FindEntry(const std::string &path, bool can_redirect,
-                                  bool must_exist) {
-  Project::Folder *best_folder = nullptr;
-  const Entry *best = nullptr;
-  std::lock_guard lock(mtx);
-  for (auto &[root, folder] : root2folder) {
-    // The entry may have different filename but it doesn't matter when building
-    // CompilerInvocation. The main filename is specified separately.
-    auto it = folder.path2entry_index.find(path);
-    if (it != folder.path2entry_index.end()) {
-      Project::Entry &entry = folder.entries[it->second];
-      if (can_redirect || entry.filename == path)
-        return entry;
-      if (entry.compdb_size) {
-        best_folder = &folder;
-        best = &entry;
-      }
-      break;
+    
+    // Delete CDB if not CMakeServer
+    if (!g_config->cmakeServerConfig._isValid) {
+      CDB.reset();
     }
   }
 
-  bool exists = false;
-  std::string dir;
-  const std::vector<const char *> *extra = nullptr;
-  Project::Entry ret;
-  for (auto &[root, folder] : root2folder)
-    if (StringRef(path).startswith(root))
-      for (auto &[dir1, args] : folder.dot_ccls)
-        if (StringRef(path).startswith(dir1)) {
-          dir = dir1;
-          extra = &args;
-          if (AppendToCDB(args))
-            goto out;
-          exists = true;
-
-          ret.root = ret.directory = root;
-          ret.filename = path;
-          if (args.empty()) {
-            ret.args = GetFallback(path);
-          } else {
-            ret.args = args;
-            ret.args.push_back(Intern(path));
-          }
-          ProjectProcessor(folder).Process(ret);
-          for (const std::string &arg : g_config->clang.extraArgs)
-            ret.args.push_back(Intern(arg));
-          ret.args.push_back(Intern("-working-directory=" + ret.directory));
-          return ret;
-        }
-out:
-  if (must_exist && !exists)
-    return ret;
-
-  if (!best) {
-    int best_score = INT_MIN;
-    for (auto &[root, folder] : root2folder) {
-      if (dir.size() && !StringRef(path).startswith(dir))
-        continue;
-      for (const Entry &e : folder.entries)
-        if (e.compdb_size && e.filename.size()) {
-          int score = ComputeGuessScore(path, e.filename);
-          if (score > best_score) {
-            best_score = score;
-            best = &e;
-            best_folder = &folder;
-          }
-        }
-    }
-  }
-
-  ret.is_inferred = true;
-  ret.filename = path;
-  if (!best) {
-    if (ret.root.empty())
-      ret.root = g_config->fallbackFolder;
-    ret.directory = ret.root;
-    ret.args = GetFallback(path);
-  } else {
-    ret.root = best->root;
-    ret.directory = best->directory;
-    ret.args = best->args;
-    ret.args.resize(best->compdb_size);
-    if (extra && extra->size())
-      ret.args.insert(ret.args.end(), extra->begin() + 1, extra->end());
-    ProjectProcessor(*best_folder).Process(ret);
+    // Use directory listing if .ccls exists or compile_commands.json does not
+    // exist.
+    Path.clear();
+    sys::path::append(Path, root, ".ccls");
+    if (sys::fs::exists(Path))
+      LoadDirectoryListing(proc, root, Seen);
+    std::vector<const char *> extra_args;
     for (const std::string &arg : g_config->clang.extraArgs)
-      ret.args.push_back(Intern(arg));
-    ret.args.push_back(Intern("-working-directory=" + ret.directory));
+      extra_args.push_back(Intern(arg));
+    for (auto &e : folder.entries) {
+      e.args.insert(e.args.end(), extra_args.begin(), extra_args.end());
+      e.args.push_back(Intern("-working-directory=" + e.directory));
+    }
   }
 
-  return ret;
-}
+  void Project::Load(const std::string &root) {
+    assert(root.back() == '/');
+    std::lock_guard lock(mtx);
+    Folder &folder = root2folder[root];
 
-void Project::Index(WorkingFiles *wfiles, RequestId id) {
-  auto &gi = g_config->index;
-  GroupMatch match(gi.whitelist, gi.blacklist),
-      match_i(gi.initialWhitelist, gi.initialBlacklist);
-  {
+    LoadDirectory(root, folder);
+    for (auto &[path, kind] : folder.search_dir2kind)
+      LOG_S(INFO) << "search directory: " << path << ' ' << " \"< "[kind];
+
+    // Setup project entries.
+    folder.path2entry_index.reserve(folder.entries.size());
+    for (size_t i = 0; i < folder.entries.size(); ++i) {
+      folder.entries[i].id = i;
+      folder.path2entry_index[folder.entries[i].filename] = i;
+    }
+  }
+
+  Project::Entry Project::FindEntry(const std::string &path, bool can_redirect,
+                                    bool must_exist) {
+    Project::Folder *best_folder = nullptr;
+    const Entry *best = nullptr;
     std::lock_guard lock(mtx);
     for (auto &[root, folder] : root2folder) {
-      int i = 0;
-      for (const Project::Entry &entry : folder.entries) {
-        std::string reason;
-        if (match.Matches(entry.filename, &reason) &&
-            match_i.Matches(entry.filename, &reason)) {
-          bool interactive = wfiles->GetFile(entry.filename) != nullptr;
-          pipeline::Index(entry.filename, entry.args,
-                          interactive ? IndexMode::Normal
-                                      : IndexMode::Background,
-                          false, id);
-        } else {
-          LOG_V(1) << "[" << i << "/" << folder.entries.size()
-                   << "]: " << reason << "; skip " << entry.filename;
+      // The entry may have different filename but it doesn't matter when
+      // building CompilerInvocation. The main filename is specified separately.
+      auto it = folder.path2entry_index.find(path);
+      if (it != folder.path2entry_index.end()) {
+        Project::Entry &entry = folder.entries[it->second];
+        if (can_redirect || entry.filename == path)
+          return entry;
+        if (entry.compdb_size) {
+          best_folder = &folder;
+          best = &entry;
         }
-        i++;
+        break;
       }
     }
+
+    bool exists = false;
+    std::string dir;
+    const std::vector<const char *> *extra = nullptr;
+    Project::Entry ret;
+    for (auto &[root, folder] : root2folder)
+      if (StringRef(path).startswith(root))
+        for (auto &[dir1, args] : folder.dot_ccls)
+          if (StringRef(path).startswith(dir1)) {
+            dir = dir1;
+            extra = &args;
+            if (AppendToCDB(args))
+              goto out;
+            exists = true;
+
+            ret.root = ret.directory = root;
+            ret.filename = path;
+            if (args.empty()) {
+              ret.args = GetFallback(path);
+            } else {
+              ret.args = args;
+              ret.args.push_back(Intern(path));
+            }
+            ProjectProcessor(folder).Process(ret);
+            for (const std::string &arg : g_config->clang.extraArgs)
+              ret.args.push_back(Intern(arg));
+            ret.args.push_back(Intern("-working-directory=" + ret.directory));
+            return ret;
+          }
+  out:
+    if (must_exist && !exists)
+      return ret;
+
+    if (!best) {
+      int best_score = INT_MIN;
+      for (auto &[root, folder] : root2folder) {
+        if (dir.size() && !StringRef(path).startswith(dir))
+          continue;
+        for (const Entry &e : folder.entries)
+          if (e.compdb_size && e.filename.size()) {
+            int score = ComputeGuessScore(path, e.filename);
+            if (score > best_score) {
+              best_score = score;
+              best = &e;
+              best_folder = &folder;
+            }
+          }
+      }
+    }
+
+    ret.is_inferred = true;
+    ret.filename = path;
+    if (!best) {
+      if (ret.root.empty())
+        ret.root = g_config->fallbackFolder;
+      ret.directory = ret.root;
+      ret.args = GetFallback(path);
+    } else {
+      ret.root = best->root;
+      ret.directory = best->directory;
+      ret.args = best->args;
+      ret.args.resize(best->compdb_size);
+      if (extra && extra->size())
+        ret.args.insert(ret.args.end(), extra->begin() + 1, extra->end());
+      ProjectProcessor(*best_folder).Process(ret);
+      for (const std::string &arg : g_config->clang.extraArgs)
+        ret.args.push_back(Intern(arg));
+      ret.args.push_back(Intern("-working-directory=" + ret.directory));
+    }
+
+    return ret;
   }
 
-  pipeline::loaded_ts = pipeline::tick;
-  // Dummy request to indicate that project is loaded and
-  // trigger refreshing semantic highlight for all working files.
-  pipeline::Index("", {}, IndexMode::Background, false);
-}
-
-void Project::IndexRelated(const std::string &path) {
-  auto &gi = g_config->index;
-  GroupMatch match(gi.whitelist, gi.blacklist);
-  std::string stem = sys::path::stem(path);
-  std::lock_guard lock(mtx);
-  for (auto &[root, folder] : root2folder)
-    if (StringRef(path).startswith(root)) {
-      for (const Project::Entry &entry : folder.entries) {
-        std::string reason;
-        if (sys::path::stem(entry.filename) == stem && entry.filename != path &&
-            match.Matches(entry.filename, &reason))
-          pipeline::Index(entry.filename, entry.args, IndexMode::Background,
-                          true);
+  void Project::Index(WorkingFiles * wfiles, RequestId id) {
+    auto &gi = g_config->index;
+    GroupMatch match(gi.whitelist, gi.blacklist),
+        match_i(gi.initialWhitelist, gi.initialBlacklist);
+    {
+      std::lock_guard lock(mtx);
+      for (auto &[root, folder] : root2folder) {
+        int i = 0;
+        for (const Project::Entry &entry : folder.entries) {
+          std::string reason;
+          if (match.Matches(entry.filename, &reason) &&
+              match_i.Matches(entry.filename, &reason)) {
+            bool interactive = wfiles->GetFile(entry.filename) != nullptr;
+            pipeline::Index(entry.filename, entry.args,
+                            interactive ? IndexMode::Normal
+                                        : IndexMode::Background,
+                            false, id);
+          } else {
+            LOG_V(1) << "[" << i << "/" << folder.entries.size()
+                     << "]: " << reason << "; skip " << entry.filename;
+          }
+          i++;
+        }
       }
-      break;
     }
-}
+
+    pipeline::loaded_ts = pipeline::tick;
+    // Dummy request to indicate that project is loaded and
+    // trigger refreshing semantic highlight for all working files.
+    pipeline::Index("", {}, IndexMode::Background, false);
+  }
+
+  void Project::IndexRelated(const std::string &path) {
+    auto &gi = g_config->index;
+    GroupMatch match(gi.whitelist, gi.blacklist);
+    std::string stem = sys::path::stem(path);
+    std::lock_guard lock(mtx);
+    for (auto &[root, folder] : root2folder)
+      if (StringRef(path).startswith(root)) {
+        for (const Project::Entry &entry : folder.entries) {
+          std::string reason;
+          if (sys::path::stem(entry.filename) == stem &&
+              entry.filename != path && match.Matches(entry.filename, &reason))
+            pipeline::Index(entry.filename, entry.args, IndexMode::Background,
+                            true);
+        }
+        break;
+      }
+  }
 } // namespace ccls

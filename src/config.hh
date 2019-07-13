@@ -44,15 +44,14 @@ struct Config {
   struct CmakeServerConfig {
     std::string cmakePath;
     bool runCmakeLocal;
-    std::string cmakeHomeDir;
     std::string cmakeBuildDir;
-    std::string user;
-    std::string server;
+    std::string sshUser;
+    std::string sshServer;
     std::string sshDir;
     std::string preCommand;
     std::string cmakeArguments;
     bool _isValid = false;
-  }cmakesServerConfig;
+  }cmakeServerConfig;
 
   struct Cache {
     // Cache directory for indexed files, either absolute or relative to the
@@ -113,6 +112,7 @@ struct Config {
     // ["-fopenmp", "-m*", "-Wall"].
     std::vector<std::string> excludeArgs;
 
+    bool excludeArgsIsWhitelist = false;
     // Additional arguments to pass to clang.
     std::vector<std::string> extraArgs;
 
@@ -346,8 +346,11 @@ REFLECT_STRUCT(Config::ServerCap::Workspace::WorkspaceFolders, supported,
 REFLECT_STRUCT(Config::ServerCap::Workspace, workspaceFolders);
 REFLECT_STRUCT(Config::ServerCap, documentOnTypeFormattingProvider,
                foldingRangeProvider, workspace);
-REFLECT_STRUCT(Config::Clang, excludeArgs, extraArgs, pathMappings,
+REFLECT_STRUCT(Config::Clang, excludeArgs, excludeArgsIsWhitelist, extraArgs,
+               pathMappings,
                resourceDir);
+REFLECT_STRUCT(Config::CmakeServerConfig, cmakePath, runCmakeLocal, cmakeBuildDir, sshUser, sshServer, sshDir, preCommand,
+               cmakeArguments);
 REFLECT_STRUCT(Config::ClientCapability, hierarchicalDocumentSymbolSupport,
                linkSupport, snippetSupport);
 REFLECT_STRUCT(Config::CodeLens, localVariables);
@@ -370,6 +373,7 @@ REFLECT_STRUCT(Config::Session, maxNum);
 REFLECT_STRUCT(Config::WorkspaceSymbol, caseSensitivity, maxNum, sort);
 REFLECT_STRUCT(Config::Xref, maxNum);
 REFLECT_STRUCT(Config, compilationDatabaseCommand, compilationDatabaseDirectory,
+               cmakeServerConfig,
                cache, capabilities, clang, client, codeLens, completion,
                diagnostics, highlight, index, request, session, workspaceSymbol,
                xref);

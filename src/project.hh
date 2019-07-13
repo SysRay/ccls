@@ -24,6 +24,7 @@ limitations under the License.
 #include <unordered_map>
 #include <vector>
 #include <limits>
+#include <clang/Tooling/CompilationDatabase.h>
 
 namespace ccls {
 struct WorkingFiles;
@@ -56,6 +57,7 @@ struct Project {
 
   std::mutex mtx;
   std::unordered_map<std::string, Folder> root2folder;
+  std::unique_ptr<clang::tooling::CompilationDatabase> CDB;
 
   // Loads a project for the given |directory|.
   //

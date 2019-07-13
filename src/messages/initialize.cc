@@ -278,13 +278,13 @@ void getCMakeServerConfig( Config::CmakeServerConfig &config, std::string_view c
 
     if (!config.runCmakeLocal) {
       if (document.FindMember("username") != document.MemberEnd()) {
-        config.user = document["username"].GetString();
+        config.sshUser = document["username"].GetString();
       } else {
         LOG_S(ERROR) << "username not set in .cmakeServerConfig!";
         return ;
       }
       if (document.FindMember("remoteName") != document.MemberEnd()) {
-        config.server = document["remoteName"].GetString();
+        config.sshServer = document["remoteName"].GetString();
       } else {
         LOG_S(ERROR) << "remoteName not set in .cmakeServerConfig!";
         return;
@@ -318,6 +318,19 @@ void getCMakeServerConfig( Config::CmakeServerConfig &config, std::string_view c
 }
 } // namespace
 
+void checkCMakeServerConfig(Config::CmakeServerConfig &config) {
+  config._isValid = false;
+  LOG_S(INFO) << "build: " << config.cmakeBuildDir;
+  if (config.cmakePath.empty() || config.cmakeBuildDir.empty())
+    return;
+
+  if (!config.runCmakeLocal) {
+    if (config.sshUser.empty() || config.sshDir.empty() || config.sshServer.empty())
+      return;
+  }
+
+  config._isValid = true;
+}
 
 
 void Initialize(MessageHandler *m, InitializeParam &param, ReplyOnce &reply) {
@@ -340,9 +353,6 @@ void Initialize(MessageHandler *m, InitializeParam &param, ReplyOnce &reply) {
         }
       }
     }
-    auto file = ccls::ReadContent(".vscode/CMakeServerConfig.json");
-    if (file)
-      getCMakeServerConfig(g_config->cmakesServerConfig, *file);
 
     rapidjson::StringBuffer output;
     rapidjson::Writer<rapidjson::StringBuffer> writer(output);
@@ -356,9 +366,11 @@ void Initialize(MessageHandler *m, InitializeParam &param, ReplyOnce &reply) {
       // Use upper case for the Driver letter on Windows.
       g_config->cache.directory =
           NormalizePath(Path.str()) + "/" +
-          std::to_string(HashUsr(g_config->cmakesServerConfig.cmakeBuildDir));
+          std::to_string(HashUsr(g_config->cmakeServerConfig.cmakeBuildDir));
       EnsureEndsInSlash(g_config->cache.directory);
     }
+
+    checkCMakeServerConfig(g_config->cmakeServerConfig);
   }
 
   // Client capabilities

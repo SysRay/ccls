@@ -81,6 +81,8 @@ REFLECT_STRUCT(CclsSemanticHighlightSymbol, id, parentKind, kind, storage,
                ranges, lsRanges);
 REFLECT_STRUCT(CclsSemanticHighlight, uri, symbols);
 
+void Reflect(JsonWriter &, EmptyParam &) {}
+
 struct CclsSetSkippedRanges {
   DocumentUri uri;
   std::vector<lsRange> skippedRanges;
@@ -228,7 +230,8 @@ void MessageHandler::Run(InMessage &msg) {
       } catch (NotIndexed &) {
         throw;
       } catch (...) {
-        reply.Error(ErrorCode::InternalError, "failed to process " + msg.method);
+        reply.Error(ErrorCode::InternalError,
+                    "failed to process " + msg.method);
       }
     } else {
       reply.Error(ErrorCode::MethodNotFound, "unknown request " + msg.method);
@@ -246,8 +249,7 @@ void MessageHandler::Run(InMessage &msg) {
   }
 }
 
-QueryFile *MessageHandler::FindFile(const std::string &path,
-                                    int *out_file_id) {
+QueryFile *MessageHandler::FindFile(const std::string &path, int *out_file_id) {
   QueryFile *ret = nullptr;
   auto it = db->name2file_id.find(LowerPathIfInsensitive(path));
   if (it != db->name2file_id.end()) {
@@ -302,7 +304,8 @@ void EmitSemanticHighlight(DB *db, WorkingFile *wfile, QueryFile &file) {
   // Group symbols together.
   std::unordered_map<SymbolIdx, CclsSemanticHighlightSymbol> grouped_symbols;
   for (auto [sym, refcnt] : file.symbol2refcnt) {
-    if (refcnt <= 0) continue;
+    if (refcnt <= 0)
+      continue;
     std::string_view detailed_name;
     SymbolKind parent_kind = SymbolKind::Unknown;
     SymbolKind kind = SymbolKind::Unknown;
@@ -478,5 +481,9 @@ void EmitSemanticHighlight(DB *db, WorkingFile *wfile, QueryFile &file) {
     if (entry.second.ranges.size() || entry.second.lsRanges.size())
       params.symbols.push_back(std::move(entry.second));
   pipeline::Notify("$ccls/publishSemanticHighlight", params);
+}
+
+void EmitConfigurationChanged() {
+  pipeline::Notify("$ccls/publishConfigurationChanged");
 }
 } // namespace ccls

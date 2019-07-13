@@ -251,12 +251,13 @@ bool ssh2Process::init(std::string const &sshdir, std::string const &pathBuild,
       return rc;
     }
 
-    rc = ssh_channel_request_exec(m_channel, (std::string("cat ") + pathBuild).c_str());
+    rc = ssh_channel_request_exec(
+        m_channel, (std::string("cat ") + pathBuild  +"/CMakeCache.txt").c_str());
     if (rc != SSH_OK) {
       ssh_channel_close(m_channel);
       ssh_channel_free(m_channel);
       m_channel = nullptr;
-      LOG_S(ERROR) << "[CMakeCache] Couldn't open file: " << pathBuild;
+      LOG_S(ERROR) << "[CMakeCache] Couldn't open file: " << pathBuild << "/CMakeCache.txt";
       return rc;
     }
     
@@ -283,13 +284,39 @@ bool ssh2Process::init(std::string const &sshdir, std::string const &pathBuild,
 
       LOG_S(INFO) << "[CMakeCache] Path to exe is: " << m_path;
     } else {
-      LOG_S(ERROR) << "[CMakeCache] Couldn't find file: " << pathBuild;
+      LOG_S(ERROR) << "[CMakeCache] Couldn't find file: " << pathBuild << "/CMakeCache.txt";
     }
     ssh_channel_send_eof(m_channel);
     ssh_channel_close(m_channel);
     ssh_channel_free(m_channel);
     //- 
     m_path += CMAKE_PARAM_SERVERCALL;
+
+    //Create tempfolder and save cmakefiles
+    m_channel = ssh_channel_new(m_session);
+    if (m_channel == NULL)
+      return SSH_ERROR;
+
+    rc = ssh_channel_open_session(m_channel);
+    if (rc != SSH_OK) {
+      ssh_channel_free(m_channel);
+      m_channel = nullptr;
+      return rc;
+    }
+
+    rc = ssh_channel_request_exec(
+        m_channel,(std::string("cd ") + pathBuild +" & mkdir -p cclsTempFolder & cp -p CMakeCache.txt cclsTempFolder/CMakeCache.txt & cp -p -R CMakeFiles cclsTempFolder/").c_str());
+    if (rc != SSH_OK) {
+      ssh_channel_close(m_channel);
+      ssh_channel_free(m_channel);
+      m_channel = nullptr;
+      LOG_S(ERROR) << "[CMakeCache] Couldn't create tempfolder: " << pathBuild;
+      return rc;
+    }
+
+    ssh_channel_send_eof(m_channel);
+    ssh_channel_close(m_channel);
+    ssh_channel_free(m_channel);
 
     // Start CmakeServer
     m_channel = ssh_channel_new(m_session);

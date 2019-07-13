@@ -28,14 +28,17 @@ extract(rapidjson::Document const &document);
 std::unordered_map<std::string, clang::tooling::CompileCommand>
 extractCacheCMakeServer(std::string const &path);
 } // namespace
+
 /// CMakeServer implementation
-class CMakeServer : public clang::tooling::CompilationDatabase {
+class CMakeServer 
+  : public clang::tooling::CompilationDatabase 
+{
 private:
   std::unique_ptr<ICMakeServerTerminal>  m_terminal;  ///< Terminal used for the server;
   std::string const m_buildDirectory;     ///< Build directory with the cmakecache file
   std::string const m_cacheArguments;
   std::unique_ptr<std::thread> m_worker;  ///< Thread  for the cmakeserver handling
-  
+  std::function<void()> m_onReconfig;
   /// Thread function
   void workerFunction();
   bool m_isRunning = false;   ///< is the thread running
@@ -53,11 +56,14 @@ private:
 public:
   CMakeServer(std::string const &pathCache, std::string const &buildDirectory,
               std::string const &cacheArguments,
+              std::function<void()> const& onReconfig,
               std::unique_ptr<ICMakeServerTerminal> terminal)
-      : m_terminal(std::move(terminal)), m_buildDirectory(buildDirectory),
-        m_cacheArguments(cacheArguments),
-       m_pathCache(pathCache) {
-
+      : m_terminal(std::move(terminal))
+      , m_buildDirectory(buildDirectory)
+      , m_cacheArguments(cacheArguments)
+      , m_onReconfig(onReconfig)
+      , m_pathCache(pathCache) 
+  {
     std::lock_guard<std::mutex> lock(m_mtxInterface);
 
     if (!m_terminal) {
@@ -68,7 +74,6 @@ public:
       m_isRunning = true;
       m_worker = std::make_unique<std::thread>([this] { workerFunction(); });
     }
-    
   }
 
   virtual ~CMakeServer() {
@@ -131,6 +136,8 @@ void CMakeServer::workerFunction() {
   bool foundStart = false;
   size_t startIndex, endIndex;
   std::string lastCMakeError;
+  std::string pathCode = m_terminal->getPathCode(); // Ends in slash
+  ccls::EnsureEndsInSlash(pathCode);
 
   while (m_isRunning) {
     // Parse information
@@ -207,7 +214,7 @@ void CMakeServer::workerFunction() {
         LOG_S(ERROR) << "[CMakeSever] Error occured: "
                      << document["errorMessage"].GetString();
  
-        m_files = extractCacheCMakeServer(m_pathCache);
+        m_files = extractCacheCMakeServer(pathCode + m_pathCache);
         m_isExtracted = true;
         m_cond.notify_all();
         m_isRunning = false; // Leave Thread!
@@ -249,7 +256,7 @@ void CMakeServer::workerFunction() {
         if (!found) {
           LOG_S(ERROR) << "[CMakeServer] Version is not supported!";
 
-          m_files = extractCacheCMakeServer(m_pathCache);
+          m_files = extractCacheCMakeServer(pathCode + m_pathCache);
           m_isExtracted = true;
           m_cond.notify_all();
           m_isRunning = false; // Leave Thread!
@@ -288,7 +295,8 @@ void CMakeServer::workerFunction() {
 
           // Save the configurations to pathCache
           {
-            std::fstream tempFile(m_pathCache, std::ofstream::out | std::ofstream::trunc);
+            std::fstream tempFile(pathCode + m_pathCache,
+                                  std::ofstream::out | std::ofstream::trunc);
             if (tempFile) {
               tempFile << message.data();
               LOG_S(INFO) << "[CMakeServer] Created Cache: " << m_pathCache;
@@ -346,14 +354,14 @@ void CMakeServer::workerFunction() {
         if (document.HasMember("name") && std::string(document["name"].GetString()).compare("dirty") == 0) {
           if (!m_rebuilding) {
             m_rebuilding = true;
+            m_isExtracted = false;
             lastCMakeError.clear();
 
-            LOG_S(INFO) << "[CMakeServer] Reconfiguring ...";
-            // onReconfig();
+            LOG_S(INFO) << "[CMakeServer] Reconfiguration needed!";
+            if (m_onReconfig)
+              m_onReconfig();
 
-            readTemp.clear();
-            m_terminal->restart();
-            break;
+            m_isRunning = false;
           }
         }
       }
@@ -367,10 +375,11 @@ void CMakeServer::workerFunction() {
 std::unique_ptr<clang::tooling::CompilationDatabase> createCMakeServer(
                   std::string const &pathCache,
                   std::string const &buildDirectory,
-                  std::string const &cacheArguments,
-                  std::unique_ptr<ICMakeServerTerminal> terminal) 
+                  std::string const &cacheArguments, 
+                  std::unique_ptr<ICMakeServerTerminal> terminal,
+                  std::function<void()>const& onReconfig) 
 {
-  return std::make_unique<CMakeServer>(pathCache, buildDirectory, cacheArguments, std::move(terminal));
+  return std::make_unique<CMakeServer>(pathCache, buildDirectory, cacheArguments, onReconfig, std::move(terminal));
 }
 
 namespace {
@@ -420,15 +429,7 @@ std::unordered_map<std::string, clang::tooling::CompileCommand> extract(rapidjso
                 for (auto &fileGroup : target["fileGroups"].GetArray()) {
                   if (fileGroup.HasMember("sources") && fileGroup["sources"].IsArray()) {
                     // Parameter for sourcefile
-                    
-                    //bool isGenerated = false;
-                    //if (fileGroup.HasMember("isGenerated"))
-                    //  isGenerated = fileGroup["isGenerated"].GetBool();
-
-                    //std::string language{"CXX"};
-                    //if (fileGroup.HasMember("language"))
-                    //  language = fileGroup["language"].GetString();
-
+                    // 
                     std::vector<std::string> args;
                     if (fileGroup.HasMember("compileFlags")) {
                       // Split the comma seperated compileFlags and add to args
@@ -448,9 +449,9 @@ std::unordered_map<std::string, clang::tooling::CompileCommand> extract(rapidjso
                         args.push_back("-xc");
                       } else if (language == "CXX") {
                         args.push_back("-xc++");
-					  }
-					}
-
+					            }
+					          }
+  
                     if (fileGroup.HasMember("defines") && fileGroup["defines"].IsArray()) {
                       for (auto &item : fileGroup["defines"].GetArray()) {
                         args.push_back("-D" + std::string(item.GetString()));
@@ -478,11 +479,10 @@ std::unordered_map<std::string, clang::tooling::CompileCommand> extract(rapidjso
                       tempTarget.Directory = std::string(target["buildDirectory"].GetString());
                       tempTarget.CommandLine = args;
 
-					  //check if file is absolute
-                      if (source.GetString()[0] == '/' ||
-                          source.GetString()[1] == ':')
+					            //check if file is absolute
+                      if (source.GetString()[0] == '/' || source.GetString()[1] == ':')
                         tempTarget.Filename = source.GetString();
-						else tempTarget.Filename =
+						          else tempTarget.Filename =
                             target["sourceDirectory"].GetString() +
                             std::string("/") + source.GetString();
                       

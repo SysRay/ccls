@@ -50,7 +50,7 @@ public:
       if (start != std::string::npos) {
         auto end = file.find('\n', ++start);
         if (end != std::string::npos) {
-          //if (file.at(end) == '\r') --end;
+          if (file.at(end-1) == '\r') --end;
           return file.substr(start, end - start);
         }
       }
