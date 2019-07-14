@@ -184,7 +184,7 @@ void MessageHandler::textDocument_codeLens(TextDocumentParam &param,
   }
 
   reply(result);
-
+/*
   std::unordered_set<ccls::Usr> seen2;
   for (auto [sym, refcnt] : file->symbol2refcnt) {
     if (seen2.insert(sym.usr).second &&  sym.kind == Kind::Type) {
@@ -193,7 +193,7 @@ void MessageHandler::textDocument_codeLens(TextDocumentParam &param,
       auto def = type.AnyDef();
       if (def == nullptr || def->kind != ccls::SymbolKind::Class)
         continue;
-      /*
+      
       TextDocumentUML temp;
       temp.classDetailed = def->detailed_name;
 
@@ -235,9 +235,10 @@ void MessageHandler::textDocument_codeLens(TextDocumentParam &param,
         temp.memberFunctions.push_back(method);
       }
        CodeVisualizer::EmitClass(&temp);
-       */
+       
     }
   }
+  */
 }
 
 void MessageHandler::workspace_executeCommand(JsonReader &reader,

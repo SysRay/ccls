@@ -597,8 +597,6 @@ out:
           auto tempFile = e.filename.substr(0, e.filename.find_last_of('.'));
 
           int score = ComputeGuessScore(tempPath, tempFile);
-          LOG_S(INFO) << "btest: " << tempPath << " " << tempFile << " "
-                      << score;
           if (score > best_score) {
             best_score = score;
             best = &e;

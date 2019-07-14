@@ -13,8 +13,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "log.hh"
 #include "message_handler.hh"
 #include "query.hh"
+#include "sema_manager.hh"
+
+#define FTS_FUZZY_MATCH_IMPLEMENTATION
+#include "fts_fuzzy_match.hh"
+
+#include <filesystem>
+#include <unordered_set>
 
 namespace ccls {
 namespace {
@@ -100,6 +108,100 @@ void MessageHandler::ccls_navigate(JsonReader &reader, ReplyOnce &reply) {
       ls_loc.uri = param.textDocument.uri;
       ls_loc.range = *ls_range;
     }
+  reply(result);
+}
+
+void MessageHandler::ccls_toggleSourceHeader(JsonReader &reader,
+                                             ReplyOnce &reply) {
+
+  Param param;
+  Reflect(reader, param);
+  auto [file, wf] = FindOrFail(param.textDocument.uri.GetPath(), reply);
+  if (!wf) {
+    return;
+  }
+
+  bool isHeader = true;
+  {
+    std::string fEnding =
+        std::filesystem::path(file->def->path).extension().string();
+    if (fEnding == ".cxx" || fEnding == ".c" || fEnding == ".cpp" ||
+        fEnding == ".cc") {
+      isHeader = false;
+    }
+  }
+
+  std::unordered_set<ccls::Usr> seen;
+  std::string filePath = db->files[file->id].def->path;
+  std::string fileName = std::filesystem::path(filePath).filename().string();
+  fileName = fileName.substr(0, fileName.find_last_of('.'));
+
+  std::vector<Location> result;
+  std::unordered_map<std::string, int> fileCount;
+  for (auto [sym, refcnt] : file->symbol2refcnt) {
+    if (seen.insert(sym.usr).second && sym.kind == Kind::Func) {
+      QueryFunc &type = db->GetFunc(sym);
+
+      if (isHeader) {
+        for (auto &dec : type.declarations) {
+          auto decFile = db->files[dec.file_id];
+          if (decFile.def->path != filePath)
+            continue;
+
+          for (auto &def : type.def) {
+            auto defFile = db->files[def.file_id];
+            if (defFile.def->path == filePath)
+              continue;
+            
+            std::string fEnding = std::filesystem::path(defFile.def->path).extension().string();
+            if (fEnding == ".cxx" || fEnding == ".c" || fEnding == ".cpp" ||
+                fEnding == ".cc") {
+              std::string defFileName = std::filesystem::path(defFile.def->path).filename().string();
+              defFileName = defFileName.substr(0, defFileName.find_last_of('.'));
+
+              int score = ComputeGuessScore(fileName, defFileName);
+              //fts::fuzzy_match(fileName.data(), defFileName.data(), score);
+              
+              fileCount[defFile.def->path] = score;
+            }
+          }
+        }
+      } else {
+        for (auto &def : type.def) {
+          auto defFile = db->files[def.file_id];
+          if (!def.spell || defFile.def->path != filePath)
+            continue;
+
+          for (auto &dec : type.declarations) {
+            std::string const decFileName = db->files[dec.file_id].def->path;
+            if (decFileName != filePath) {
+              if (fileCount.find(decFileName) == fileCount.end()) {
+                fileCount[decFileName] = 0;
+              } else {
+                fileCount[decFileName] = ++fileCount[decFileName];
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  auto maxValue =
+      std::max_element(std::begin(fileCount), std::end(fileCount),
+                       [](const decltype(fileCount)::value_type &p1,
+                          const decltype(fileCount)::value_type &p2) {
+                         return p1.second < p2.second;
+                       });
+
+  if (maxValue != std::end(fileCount)) {
+    LOG_S(INFO) << "toggle: " << maxValue->first << " score: " << maxValue->second;
+
+    Location temp;
+    temp.uri = DocumentUri::FromPath(maxValue->first);
+    result.push_back(std::move(temp));
+  }
+
   reply(result);
 }
 } // namespace ccls

@@ -176,6 +176,7 @@ MessageHandler::MessageHandler() {
   Bind("$ccls/inheritance", &MessageHandler::ccls_inheritance);
   Bind("$ccls/member", &MessageHandler::ccls_member);
   Bind("$ccls/navigate", &MessageHandler::ccls_navigate);
+  Bind("$ccls/toggleSourceHeader", &MessageHandler::ccls_toggleSourceHeader);
   Bind("$ccls/reload", &MessageHandler::ccls_reload);
   Bind("$ccls/vars", &MessageHandler::ccls_vars);
   Bind("exit", &MessageHandler::exit);
