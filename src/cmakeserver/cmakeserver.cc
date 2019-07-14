@@ -64,8 +64,6 @@ public:
       , m_onReconfig(onReconfig)
       , m_pathCache(pathCache) 
   {
-    std::lock_guard<std::mutex> lock(m_mtxInterface);
-
     if (!m_terminal) {
       m_files = extractCacheCMakeServer(m_pathCache);
       m_isExtracted = true;
@@ -386,8 +384,11 @@ namespace {
 
 std::unordered_map<std::string, clang::tooling::CompileCommand> extractCacheCMakeServer(std::string const &path) {
   auto file = ccls::ReadContent(path);
-  if (!file)
+  if (!file) {
+    LOG_S(ERROR) << "[CMakeServer] Couldn't open cache: " << path;
     return {};
+  }
+    
   LOG_S(INFO) << "[CMakeServer] Reading cached configuration";
   rapidjson::Document document;
   document.Parse(file->data());

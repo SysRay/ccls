@@ -408,12 +408,12 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       terminal = createRemoteCMakeServerTerminal(
           settings.sshDir, settings.cmakeBuildDir, settings.cmakePath,
           settings.sshServer, settings.sshUser, "", 22, settings.preCommand);
-
-    CDB.reset(createCMakeServer(".vscode/CMakeServerCache.json",
+    std::string rootFolder = root;
+    EnsureEndsInSlash(rootFolder);
+    CDB.reset(createCMakeServer(rootFolder + ".vscode/CMakeServerCache.json",
                                 settings.cmakeBuildDir + "/cclsTempFolder",
                                 settings.cmakeArguments, std::move(terminal),
-                                ccls::EmitConfigurationChanged)
-                  .release());
+                                ccls::EmitConfigurationChanged).release());
   } else {
     CDB.reset(tooling::CompilationDatabase::loadFromDirectory(CDBDir, err_msg)
                   .release());
