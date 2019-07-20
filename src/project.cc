@@ -318,6 +318,7 @@ void LoadDirectoryListing(ProjectProcessor &proc, const std::string &root,
 }
 } // namespace
 
+#undef max()
 // Computes a score based on how well |a| and |b| match. This is used for
 // argument guessing.
 int ComputeGuessScore(std::string_view a, std::string_view b) {
@@ -330,6 +331,22 @@ int ComputeGuessScore(std::string_view a, std::string_view b) {
   if (i + j < a.size())
     score -= 100 * (std::count(a.begin() + i, a.end() - j, '/') +
                     std::count(b.begin() + i, b.end() - j, '/'));
+  // Increase score for a common substring in the middle (e.g. in case of
+  // separate source and include dirs.
+  size_t max_middle = 0;
+  size_t max_middle_dirs = 0;
+  for (; i < a.size(); ++i) {
+    for (size_t k = j; k < b.size(); ++k) {
+      size_t matching =
+          std::mismatch(a.begin() + i, a.end(), b.begin() + k, b.end()).first -
+          (a.begin() + i);
+      size_t dirs = std::count(a.begin() + i, a.begin() + i + matching, '/');
+      max_middle = std::max(max_middle, matching);
+      max_middle_dirs = std::max(max_middle_dirs, dirs);
+    }
+  }
+  score += 10 * max_middle;
+  score += 100 * max_middle_dirs;
   return score;
 }
 struct CMakeServerConfig {
@@ -408,12 +425,13 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       terminal = createRemoteCMakeServerTerminal(
           settings.sshDir, settings.cmakeBuildDir, settings.cmakePath,
           settings.sshServer, settings.sshUser, "", 22, settings.preCommand);
-    std::string rootFolder = root;
+    std::string rootFolder = g_config->fallbackFolder;
     EnsureEndsInSlash(rootFolder);
     CDB.reset(createCMakeServer(rootFolder + ".vscode/CMakeServerCache.json",
-                                settings.cmakeBuildDir + "/cclsTempFolder",
-                                settings.cmakeArguments, std::move(terminal),
-                                ccls::EmitConfigurationChanged).release());
+                                settings.cmakeBuildDir, settings.cmakeArguments,
+                                std::move(terminal),
+                                ccls::EmitConfigurationChanged)
+                  .release());
   } else {
     CDB.reset(tooling::CompilationDatabase::loadFromDirectory(CDBDir, err_msg)
                   .release());
@@ -462,7 +480,10 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
         if (arg.compare(0, 2, "-I") == 0 ||
             arg.compare(0, 8, "-isystem") == 0) {
           DoPathMapping(arg);
-        } else if (arg.compare(0, 2, "-x") == 0) {
+        } 
+        // Default args, no filtering
+        else if (arg.compare(0, 2, "-x") == 0 ||
+                   arg.compare(0, 2, "-D") == 0) {
 
         } else if (proc.ExcludesArg(arg) !=
                    g_config->clang.excludeArgsIsWhitelist)
@@ -585,25 +606,24 @@ out:
   if (must_exist && !exists)
     return ret;
 
-  
-  //if (!best) {
-    int best_score = INT_MIN;
-    for (auto &[root, folder] : root2folder) {
-      if (dir.size() && !StringRef(path).startswith(dir))
-        continue;
-      for (const Entry &e : folder.entries)
-        if (e.compdb_size && e.filename.size()) {
-          auto tempPath = path.substr(0, path.find_last_of('.'));
-          auto tempFile = e.filename.substr(0, e.filename.find_last_of('.'));
+  // if (!best) {
+  int best_score = INT_MIN;
+  for (auto &[root, folder] : root2folder) {
+    if (dir.size() && !StringRef(path).startswith(dir))
+      continue;
+    for (const Entry &e : folder.entries)
+      if (e.compdb_size && e.filename.size()) {
+        auto tempPath = path.substr(0, path.find_last_of('.'));
+        auto tempFile = e.filename.substr(0, e.filename.find_last_of('.'));
 
-          int score = ComputeGuessScore(tempPath, tempFile);
-          if (score > best_score) {
-            best_score = score;
-            best = &e;
-            best_folder = &folder;
-          }
+        int score = ComputeGuessScore(tempPath, tempFile);
+        if (score > best_score) {
+          best_score = score;
+          best = &e;
+          best_folder = &folder;
         }
-    }
+      }
+  }
   //}
 
   ret.is_inferred = true;
@@ -620,12 +640,26 @@ out:
     ret.args = best->args;
     ret.args.resize(best->compdb_size);
     ret.tuFile = best->filename;
-      if (extra && extra->size())
-        ret.args.insert(ret.args.end(), extra->begin() + 1, extra->end());
+    if (extra && extra->size())
+      ret.args.insert(ret.args.end(), extra->begin() + 1, extra->end());
     ProjectProcessor(*best_folder).Process(ret);
     for (const std::string &arg : g_config->clang.extraArgs)
       ret.args.push_back(Intern(arg));
     ret.args.push_back(Intern("-working-directory=" + ret.directory));
+  }
+
+  bool ok = false;
+  for (StringRef suffix : g_config->completion.include.suffixWhitelist)
+    if (StringRef(path).endswith(suffix)) {
+      ok = true;
+      break;
+    }
+
+  if (!ok) {
+    std::string const tempName =
+        std::filesystem::path(path).filename().string();
+    EmitNotification({tempName + " is an extern file!"});
+    LOG_S(INFO) << "extern file: " << path;
   }
 
   return ret;

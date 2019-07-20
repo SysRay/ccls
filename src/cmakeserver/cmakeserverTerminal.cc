@@ -100,16 +100,6 @@ bool consoleProcess::init(std::string const &pathBuild,
                    << pathBuild << "/CMakeCache.txt";
       return false;
     }
-    
-    // Create tempfolder and save cmakefiles
-    std::error_code ec;
-    std::filesystem::create_directory(pathBuild + "/cclsTempFolder",ec);
-    std::filesystem::copy(pathBuild + "/CMakeCache.txt",
-                          pathBuild + "/cclsTempFolder/CMakeCache.txt",ec);
-
-    std::filesystem::copy(pathBuild + "/CMakeFiles",
-                          pathBuild + "/cclsTempFolder/CMakeFiles",
-                          std::filesystem::copy_options::recursive,ec);
 
     // Create pipes to write and read data
     SECURITY_ATTRIBUTES secattr;

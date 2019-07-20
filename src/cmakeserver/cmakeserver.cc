@@ -212,7 +212,7 @@ void CMakeServer::workerFunction() {
         LOG_S(ERROR) << "[CMakeSever] Error occured: "
                      << document["errorMessage"].GetString();
  
-        m_files = extractCacheCMakeServer(pathCode + m_pathCache);
+        m_files = extractCacheCMakeServer(m_pathCache);
         m_isExtracted = true;
         m_cond.notify_all();
         m_isRunning = false; // Leave Thread!
@@ -254,7 +254,7 @@ void CMakeServer::workerFunction() {
         if (!found) {
           LOG_S(ERROR) << "[CMakeServer] Version is not supported!";
 
-          m_files = extractCacheCMakeServer(pathCode + m_pathCache);
+          m_files = extractCacheCMakeServer(m_pathCache);
           m_isExtracted = true;
           m_cond.notify_all();
           m_isRunning = false; // Leave Thread!
@@ -428,11 +428,12 @@ std::unordered_map<std::string, clang::tooling::CompileCommand> extract(rapidjso
 
               if (target.HasMember("fileGroups") && target["fileGroups"].IsArray()) {
                 for (auto &fileGroup : target["fileGroups"].GetArray()) {
-                  if (fileGroup.HasMember("sources") && fileGroup["sources"].IsArray()) {
+                  if (fileGroup.HasMember("sources") &&
+                      fileGroup["sources"].IsArray() &&
+                      fileGroup.HasMember("compileFlags")) {
                     // Parameter for sourcefile
                     // 
                     std::vector<std::string> args;
-                    if (fileGroup.HasMember("compileFlags")) {
                       // Split the comma seperated compileFlags and add to args
                       std::stringstream argsStream(fileGroup["compileFlags"].GetString());
 
@@ -442,7 +443,6 @@ std::unordered_map<std::string, clang::tooling::CompileCommand> extract(rapidjso
 
                       std::copy(vstrings.begin(), vstrings.end(),
                                 std::back_inserter(args));
-                    }
 
                     if (fileGroup.HasMember("language")) {
                       std::string const language = fileGroup["language"].GetString();
