@@ -203,6 +203,8 @@ REFLECT_UNDERLYING_B(LanguageId);
 struct NotIndexed {
   std::string path;
 };
+REFLECT_STRUCT(NotIndexed, path);
+
 struct MessageHandler;
 
 struct ReplyOnce {
@@ -300,4 +302,5 @@ void EmitSkippedRanges(WorkingFile *wfile, QueryFile &file);
 void EmitSemanticHighlight(DB *db, WorkingFile *wfile, QueryFile &file);
 
 void EmitConfigurationChanged();
+void EmitNotification(NotIndexed message);
 } // namespace ccls

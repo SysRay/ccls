@@ -487,4 +487,9 @@ void EmitSemanticHighlight(DB *db, WorkingFile *wfile, QueryFile &file) {
 void EmitConfigurationChanged() {
   pipeline::Notify("$ccls/publishConfigurationChanged");
 }
+
+void EmitNotification(NotIndexed message) {
+  pipeline::Notify("$ccls/notification", message);
+}
+
 } // namespace ccls
