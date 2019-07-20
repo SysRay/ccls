@@ -37,7 +37,7 @@
 #include <cstdint> // uint8_t
 #include <cstring> // memcpy
 #include <ctype.h> // ::tolower, ::toupper
-
+#include <array>
 #include <cstdio>
 
 // Public interface
@@ -74,15 +74,15 @@ static bool fuzzy_match_simple(char const *pattern, char const *str) {
 
 static bool fuzzy_match(char const *pattern, char const *str, int &outScore) {
 
-  uint8_t matches[256];
-  return fuzzy_match(pattern, str, outScore, matches, sizeof(matches));
+  std::array<uint8_t, 256> matches ={};
+  return fuzzy_match(pattern, str, outScore, matches.data(), matches.size());
 }
 
 static bool fuzzy_match(char const *pattern, char const *str, int &outScore,
                         uint8_t *matches, int maxMatches) {
   int recursionCount = 0;
   int recursionLimit = 10;
-
+  outScore = std::numeric_limits<int>::min();
   return fuzzy_internal::fuzzy_match_recursive(pattern, str, outScore, str,
                                                nullptr, matches, maxMatches, 0,
                                                recursionCount, recursionLimit);
@@ -155,7 +155,7 @@ static bool fuzzy_internal::fuzzy_match_recursive(
     const int sequential_bonus = 15; // bonus for adjacent matches
     const int separator_bonus = 30;  // bonus if match occurs after a separator
     const int camel_bonus = 30; // bonus if match is uppercase and prev is lower
-    const int first_letter_bonus = 20; // bonus if the first letter is matched
+    const int first_letter_bonus = 40; // bonus if the first letter is matched
 
     const int leading_letter_penalty =
         -5; // penalty applied for every letter in str before the first match
@@ -163,7 +163,7 @@ static bool fuzzy_internal::fuzzy_match_recursive(
         -15; // maximum penalty for leading letters
     const int unmatched_letter_penalty =
         -1; // penalty for every letter that doesn't matter
-  
+
     // Iterate str to end
     while (*str != '\0')
       ++str;
@@ -178,8 +178,8 @@ static bool fuzzy_internal::fuzzy_match_recursive(
     outScore += penalty;
 
     // Apply unmatched penalty
-    int unmatched = (int)(str - strBegin) - nextMatch;
-    outScore += unmatched_letter_penalty * unmatched;
+    // int unmatched = (int)(str - strBegin) - nextMatch;
+    // outScore += unmatched_letter_penalty * unmatched;
 
     // Apply ordering bonuses
     for (int i = 0; i < nextMatch; ++i) {
@@ -202,7 +202,8 @@ static bool fuzzy_internal::fuzzy_match_recursive(
           outScore += camel_bonus;
 
         // Separator
-        bool neighborSeparator = neighbor == '_' || neighbor == ' ' || neighbor == '/';
+        bool neighborSeparator =
+            neighbor == '_' || neighbor == ' ' || neighbor == '/';
         if (neighborSeparator)
           outScore += separator_bonus;
       } else {
