@@ -19,9 +19,9 @@ limitations under the License.
 #include "pipeline.hh"
 #include "sema_manager.hh"
 #include "working_files.hh"
-#include <limits>
 #include <clang/Sema/CodeCompleteConsumer.h>
 #include <clang/Sema/Sema.h>
+#include <limits>
 
 #if LLVM_VERSION_MAJOR < 8
 #include <regex>
@@ -63,8 +63,7 @@ REFLECT_STRUCT(CompletionList, isIncomplete, items);
 
 #if LLVM_VERSION_MAJOR < 8
 void DecorateIncludePaths(const std::smatch &match,
-                          std::vector<CompletionItem> *items,
-                          char quote) {
+                          std::vector<CompletionItem> *items, char quote) {
   std::string spaces_after_include = " ";
   if (match[3].compare("include") == 0 && quote != '\0')
     spaces_after_include = match[4].str();
@@ -166,12 +165,15 @@ void FilterCandidates(CompletionList &result, const std::string &complete_text,
       auto &edits = item.additionalTextEdits;
       if (overwrite_len > 0) {
         item.textEdit.range.start = overwrite_begin;
-        std::string orig = buffer_line.substr(overwrite_begin.character, overwrite_len);
+        std::string orig =
+            buffer_line.substr(overwrite_begin.character, overwrite_len);
         if (edits.size() && edits[0].range.end == begin_pos &&
             edits[0].range.start.line == begin_pos.line) {
-          int cur_edit_len = edits[0].range.end.character - edits[0].range.start.character;
+          int cur_edit_len =
+              edits[0].range.end.character - edits[0].range.start.character;
           item.textEdit.newText =
-              buffer_line.substr(overwrite_begin.character, overwrite_len - cur_edit_len) +
+              buffer_line.substr(overwrite_begin.character,
+                                 overwrite_len - cur_edit_len) +
               edits[0].newText + item.textEdit.newText;
           edits.erase(edits.begin());
         } else {
@@ -201,9 +203,30 @@ void FilterCandidates(CompletionList &result, const std::string &complete_text,
     }
     items.erase(std::remove_if(items.begin(), items.end(),
                                [](const CompletionItem &item) {
-                                 return item.score_ <= 0.5 * std::numeric_limits<int>::min();
+                                 return item.score_ <=
+                                        std::numeric_limits<int>::min();
                                }),
                 items.end());
+  } else {
+    for (CompletionItem &item : items) {
+      const std::string &filter =
+          item.filterText.size() ? item.filterText : item.label;
+
+      switch (item.kind)
+      { 
+      case ccls::CompletionItemKind::Snippet:
+        if (filter.find("override",2) != std::string::npos){
+          item.score_ = 100;
+        }else{
+          item.score_ = 90;
+        }
+        
+        break;
+      default:
+        item.score_ = 0;
+        break;
+      }
+    }
   }
   std::sort(items.begin(), items.end(),
             [](const CompletionItem &lhs, const CompletionItem &rhs) {
@@ -414,7 +437,8 @@ public:
         CodeCompleteConsumer(Opts, false),
 #endif
         Alloc(std::make_shared<clang::GlobalCodeCompletionAllocator>()),
-        CCTUInfo(Alloc), from_cache(from_cache) {}
+        CCTUInfo(Alloc), from_cache(from_cache) {
+  }
 
   void ProcessCodeCompleteResults(Sema &S, CodeCompletionContext Context,
                                   CodeCompletionResult *Results,
@@ -461,8 +485,10 @@ public:
 
       for (size_t j = first_idx; j < ls_items.size(); j++) {
         if (g_config->client.snippetSupport &&
-            ls_items[j].insertTextFormat == InsertTextFormat::Snippet)
-          ls_items[j].textEdit.newText += "$0";
+            ls_items[j].insertTextFormat == InsertTextFormat::Snippet) {
+            ls_items[j].textEdit.newText += "$0";
+        }
+          
         ls_items[j].priority_ = CCS->getPriority();
         if (!g_config->completion.detailedLabel) {
           ls_items[j].detail = ls_items[j].label;
