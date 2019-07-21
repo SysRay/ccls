@@ -30,6 +30,7 @@ limitations under the License.
 #include <ctype.h>
 #include <functional>
 #include <limits.h>
+#include <filesystem>
 using namespace llvm;
 
 namespace ccls {
@@ -226,7 +227,25 @@ done_add:
     for (auto &cand : cands)
       result.push_back(std::get<0>(cand));
   }
+  
+  reply(result);
+}
 
+void MessageHandler::workspace_projectFiles(EmptyParam &, ReplyOnce & reply) {
+  std::vector<CompletionFileItem> result;
+  for (auto const &item : db->files) {
+    CompletionFileItem temp;
+    temp.label = std::filesystem::path(item.def->path).filename().string();
+    temp.detail = "";
+    temp.detail = item.def->path;
+    result.push_back(std::move(temp));
+  }
+
+  std::sort(result.begin(), result.end(),
+            [](CompletionFileItem const &lhs, CompletionFileItem const &rhs)
+            {
+              return lhs.label < rhs.label;
+            });
   reply(result);
 }
 } // namespace ccls

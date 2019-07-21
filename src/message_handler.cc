@@ -210,6 +210,7 @@ MessageHandler::MessageHandler() {
   Bind("workspace/didChangeWorkspaceFolders", &MessageHandler::workspace_didChangeWorkspaceFolders);
   Bind("workspace/executeCommand", &MessageHandler::workspace_executeCommand);
   Bind("workspace/symbol", &MessageHandler::workspace_symbol);
+  Bind("workspace/projectFiles", &MessageHandler::workspace_projectFiles);
   // clang-format on
 }
 

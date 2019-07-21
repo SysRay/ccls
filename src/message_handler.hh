@@ -34,7 +34,7 @@ struct WorkingFiles;
 namespace pipeline {
 void Reply(RequestId id, const std::function<void(JsonWriter &)> &fn);
 void ReplyError(RequestId id, const std::function<void(JsonWriter &)> &fn);
-}
+} // namespace pipeline
 
 struct CodeActionParam {
   TextDocumentIdentifier textDocument;
@@ -109,10 +109,7 @@ enum class CompletionItemKind {
   Operator = 24,
   TypeParameter = 25,
 };
-enum class InsertTextFormat {
-  PlainText = 1,
-  Snippet = 2
-};
+enum class InsertTextFormat { PlainText = 1, Snippet = 2 };
 struct CompletionItem {
   std::string label;
   CompletionItemKind kind = CompletionItemKind::Text;
@@ -129,6 +126,13 @@ struct CompletionItem {
   unsigned priority_;
   int quote_kind_ = 0;
 };
+
+struct CompletionFileItem {
+  std::string label;
+  std::string detail;
+  std::string description;
+};
+REFLECT_STRUCT(CompletionFileItem, label, detail, description);
 
 // formatting
 struct FormattingOptions {
@@ -196,7 +200,8 @@ REFLECT_STRUCT(TextDocumentItem, uri, languageId, version, text);
 REFLECT_STRUCT(TextEdit, range, newText);
 REFLECT_STRUCT(VersionedTextDocumentIdentifier, uri, version);
 REFLECT_STRUCT(DiagnosticRelatedInformation, location, message);
-REFLECT_STRUCT(Diagnostic, range, severity, code, source, message, relatedInformation);
+REFLECT_STRUCT(Diagnostic, range, severity, code, source, message,
+               relatedInformation);
 REFLECT_STRUCT(ShowMessageParam, type, message);
 REFLECT_UNDERLYING_B(LanguageId);
 
@@ -295,6 +300,7 @@ private:
   void workspace_didChangeWorkspaceFolders(DidChangeWorkspaceFoldersParam &);
   void workspace_executeCommand(JsonReader &, ReplyOnce &);
   void workspace_symbol(WorkspaceSymbolParam &, ReplyOnce &);
+  void workspace_projectFiles(EmptyParam &, ReplyOnce &);
 };
 
 void EmitSkippedRanges(WorkingFile *wfile, QueryFile &file);
