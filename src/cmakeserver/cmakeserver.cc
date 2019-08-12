@@ -293,7 +293,7 @@ void CMakeServer::workerFunction() {
 
           // Save the configurations to pathCache
           {
-            std::fstream tempFile(pathCode + m_pathCache,
+            std::fstream tempFile(m_pathCache,
                                   std::ofstream::out | std::ofstream::trunc);
             if (tempFile) {
               tempFile << message.data();
