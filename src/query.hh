@@ -220,7 +220,7 @@ LocationLink GetLocationLink(DB *db, WorkingFiles *wfiles, DeclRef dr);
 
 // Returns a symbol. The symbol will *NOT* have a location assigned.
 std::optional<SymbolInformation> GetSymbolInfo(DB *db, SymbolIdx sym,
-                                                 bool detailed);
+                                                 bool detailed, bool const incScope = true);
 
 std::vector<SymbolRef> FindSymbolsAtLocation(WorkingFile *working_file,
                                              QueryFile *file,

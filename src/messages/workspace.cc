@@ -124,7 +124,7 @@ bool AddSymbol(
     DB *db, WorkingFiles *wfiles, const std::vector<uint8_t> &file_set,
     SymbolIdx sym, bool use_detailed,
     std::vector<std::tuple<SymbolInformation, int, SymbolIdx>> *result) {
-  std::optional<SymbolInformation> info = GetSymbolInfo(db, sym, true);
+  std::optional<SymbolInformation> info = GetSymbolInfo(db, sym, false, false);
   if (!info)
     return false;
 

@@ -762,8 +762,7 @@ SymbolKind GetSymbolKind(DB *db, SymbolIdx sym) {
   return ret;
 }
 
-std::optional<SymbolInformation> GetSymbolInfo(DB *db, SymbolIdx sym,
-                                               bool detailed) {
+std::optional<SymbolInformation> GetSymbolInfo(DB *db, SymbolIdx sym, bool detailed, bool const incScope) {
   switch (sym.kind) {
   case Kind::Invalid:
     break;
@@ -783,7 +782,7 @@ std::optional<SymbolInformation> GetSymbolInfo(DB *db, SymbolIdx sym,
       if (detailed)
         info.name = def.detailed_name;
       else
-        info.name = def.Name(true);
+        info.name = def.Name(false);
       info.kind = def.kind;
       return false;
     });
