@@ -17,6 +17,7 @@ class consoleProcess : public ICMakeServerTerminal {
 private:
   HANDLE wPipeInput, wPipeOutput;
   HANDLE rPipeInput, rPipeOutput;
+  HANDLE ghJob;
 
   PROCESS_INFORMATION m_processInfo;
   std::string m_path;
@@ -101,6 +102,22 @@ bool consoleProcess::init(std::string const &pathBuild,
       return false;
     }
 
+    // Create JobObject to shutdown child process automatically
+    ghJob = CreateJobObject(NULL, NULL); // GLOBAL
+    if (ghJob == NULL) {
+      LOG_S(ERROR) << "[CMakeServer] Couldn't create ghJob";
+      return false;
+    }
+
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli = {0};
+    jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    if (0 == SetInformationJobObject(ghJob, JobObjectExtendedLimitInformation,
+                                     &jeli, sizeof(jeli))) {
+      LOG_S(ERROR) << "[CMakeServer] Couldn't set ghJob";
+      return false;
+    }
+    //-
+
     // Create pipes to write and read data
     SECURITY_ATTRIBUTES secattr;
     ZeroMemory(&secattr, sizeof(secattr));
@@ -113,7 +130,7 @@ bool consoleProcess::init(std::string const &pathBuild,
 
     // Create Process with pipe
     STARTUPINFO si;
-    DWORD flags = 0; // CREATE_NO_WINDOW;
+    DWORD flags = 0 | CREATE_SUSPENDED; // CREATE_NO_WINDOW;
 
     ZeroMemory(&m_processInfo, sizeof(PROCESS_INFORMATION));
     ZeroMemory(&si, sizeof(STARTUPINFO));
@@ -141,6 +158,12 @@ bool consoleProcess::init(std::string const &pathBuild,
       CloseHandle(rPipeInput);
       return false;
     }
+
+    if (0 == AssignProcessToJobObject(ghJob, m_processInfo.hProcess)) {
+      LOG_S(ERROR) << "[CMakeServer] Couldn't assign ghJob";
+    }
+
+    ResumeThread(m_processInfo.hThread);
 
     m_isValid = true;
     return true;
