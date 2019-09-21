@@ -51,6 +51,7 @@ limitations under the License.
 #include <filesystem>
 #include <limits.h>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 using namespace clang;
@@ -316,6 +317,16 @@ void LoadDirectoryListing(ProjectProcessor &proc, const std::string &root,
       folder.entries.push_back(e);
     }
 }
+
+void checkPath(std::string const &arg) {
+  static std::unordered_map<std::string, int> pathList;
+  auto pathListPair = pathList.insert({arg, 0});
+  if (pathListPair.second) {
+    if (!std::filesystem::exists(std::filesystem::path(arg))) {
+      LOG_S(ERROR) << "Path does not exist: " << arg;
+    }
+  }
+}
 } // namespace
 
 #undef max()
@@ -471,15 +482,24 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       NormalizeFolder(entry.directory);
       DoPathMapping(Cmd.Filename);
       entry.filename = Cmd.Filename;
-      entry.tuFile = entry.filename;
       NormalizeFolder(entry.filename);
+      entry.tuFile = entry.filename;
+      
+      checkPath(entry.root);
+      checkPath(entry.directory);
+      checkPath(entry.filename);
+      checkPath(entry.tuFile);
 
       std::vector<std::string> args = std::move(Cmd.CommandLine);
       entry.args.reserve(args.size());
       for (std::string &arg : args) {
-        if (arg.compare(0, 2, "-I") == 0 ||
-            arg.compare(0, 8, "-isystem") == 0) {
+        if (arg.compare(0, 2, "-I") == 0) {
           DoPathMapping(arg);
+          checkPath(arg.substr(2));
+        }
+        else if (arg.compare(0, 8, "-isystem") == 0) {
+          DoPathMapping(arg);
+          checkPath(arg.substr(8));
         } 
         // Default args, no filtering
         else if (arg.compare(0, 2, "-x") == 0 ||
@@ -658,7 +678,7 @@ out:
   if (!ok) {
     std::string const tempName =
         std::filesystem::path(path).filename().string();
-    EmitNotification({tempName + " is an extern file!"});
+    EmitNotification({tempName + " not used in project!"});
     LOG_S(INFO) << "extern file: " << path;
   }
 
