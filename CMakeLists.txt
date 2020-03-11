@@ -26,7 +26,8 @@ endif()
 ### Compile options
 
 # CMake default compile flags:
-# MSVC + Clang(Windows):
+# MSVC + Clang(Windows):d
+# MSVC + Clang(Windows):d
 #   debug: /MDd /Zi /Ob0 /Od /RTC1
 #   release: /MD /O2 /Ob2 /DNDEBUG
 # GCC + Clang(Linux):
@@ -225,12 +226,6 @@ target_sources(ccls PRIVATE
   src/messages/textDocument_rename.cc
   src/messages/textDocument_signatureHelp.cc
   src/messages/workspace.cc
-)
-
-target_sources(ccls PRIVATE
-  src/cmakeserver/cmakeserver.cc
-  src/cmakeserver/cmakeserverTerminal.cc
-  src/cmakeserver/cmakeserverSSHTerminal.cc
 )
 
 

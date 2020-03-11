@@ -16,8 +16,6 @@ limitations under the License.
 #include "project.hh"
 
 #include "clang_tu.hh" // llvm::vfs
-#include "cmakeserver/ICMakeserver.hh"
-#include "cmakeserver/ICMakeserverTerminal.hh"
 
 #include "filesystem.hh"
 #include "log.hh"
@@ -424,34 +422,15 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
     }
   }
 
-  if (g_config->cmakeServerConfig._isValid) {
-    auto &settings = g_config->cmakeServerConfig;
 
-    std::unique_ptr<ICMakeServerTerminal> terminal;
-
-    if (settings.runCmakeLocal)
-      terminal = createLocalCMakeServerTerminal(
-          settings.cmakeBuildDir, settings.cmakePath, settings.preCommand);
-    else
-      terminal = createRemoteCMakeServerTerminal(
-          settings.sshDir, settings.cmakeBuildDir, settings.cmakePath,
-          settings.sshServer, settings.sshUser, "", 22, settings.preCommand);
-    std::string rootFolder = g_config->fallbackFolder;
-    EnsureEndsInSlash(rootFolder);
-    CDB.reset(createCMakeServer(rootFolder + ".vscode/CMakeServerCache.json",
-                                settings.cmakeBuildDir, settings.cmakeArguments,
-                                std::move(terminal),
-                                ccls::EmitConfigurationChanged)
-                  .release());
-  } else {
-    CDB.reset(tooling::CompilationDatabase::loadFromDirectory(CDBDir, err_msg)
-                  .release());
-    if (CDB)
-      LOG_S(INFO) << "loaded " << Path.c_str();
-    else if (g_config->compilationDatabaseCommand.size() ||
-             sys::fs::exists(Path))
-      LOG_S(ERROR) << "failed to load " << Path.c_str();
-  }
+  CDB.reset(tooling::CompilationDatabase::loadFromDirectory(CDBDir, err_msg)
+                .release());
+  if (CDB)
+    LOG_S(INFO) << "loaded " << Path.c_str();
+  else if (g_config->compilationDatabaseCommand.size() || sys::fs::exists(Path))
+    LOG_S(ERROR) << "failed to load " << Path.c_str();
+  else
+    LOG_S(ERROR) << "Couldn't load " << CDBDir.data();
 
   if (!g_config->compilationDatabaseCommand.empty()) {
 #ifdef _WIN32
@@ -477,12 +456,23 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
 
       // If workspace folder is real/ but entries use symlink/, convert to
       // real/.
-      DoPathMapping(Cmd.Directory);
+      
       entry.directory = Cmd.Directory;
+      DoPathMapping(entry.directory);
       NormalizeFolder(entry.directory);
-      DoPathMapping(Cmd.Filename);
+      LOG_S(INFO) << "dir: " << entry.directory;
+
       entry.filename = Cmd.Filename;
-      NormalizeFolder(entry.filename);
+      if (entry.filename[0] == '/' || entry.filename[1] == ':') {
+        // path is absolute
+        DoPathMapping(entry.filename);
+        NormalizeFolder(entry.filename);
+      } else {
+        // path is relative
+        entry.filename = entry.directory + '/' + entry.filename;
+      }
+      LOG_S(INFO) << "file: " << entry.filename;
+
       entry.tuFile = entry.filename;
       
       checkPath(entry.root);
@@ -493,6 +483,7 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       std::vector<std::string> args = std::move(Cmd.CommandLine);
       entry.args.reserve(args.size());
       for (std::string &arg : args) {
+        
         if (arg.compare(0, 2, "-I") == 0) {
           DoPathMapping(arg);
           checkPath(arg.substr(2));
@@ -505,7 +496,8 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
         else if (arg.compare(0, 2, "-x") == 0 ||
                    arg.compare(0, 2, "-D") == 0) {
 
-        } else if (proc.ExcludesArg(arg) !=
+        } 
+        else if (proc.ExcludesArg(arg) !=
                    g_config->clang.excludeArgsIsWhitelist)
           continue;
 
@@ -513,7 +505,7 @@ void Project::LoadDirectory(const std::string &root, Project::Folder &folder) {
       }
       entry.args.push_back(Intern(entry.filename));
       if (entry.filename.empty()) {
-        LOG_S(ERROR) << "Couldn't resolve: " << Cmd.Filename;
+        LOG_S(ERROR) << "Couldn't resolve: " << entry.filename;
       }
       entry.compdb_size = entry.args.size();
 

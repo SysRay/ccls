@@ -236,7 +236,7 @@ void MessageHandler::workspace_projectFiles(EmptyParam &, ReplyOnce & reply) {
   for (auto const &item : db->files) {
     CompletionFileItem temp;
     temp.label = std::filesystem::path(item.def->path).filename().string();
-    temp.detail = "";
+    temp.description = "";
     temp.detail = item.def->path;
     result.push_back(std::move(temp));
   }
