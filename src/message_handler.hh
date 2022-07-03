@@ -255,6 +255,7 @@ private:
   void ccls_inheritance(JsonReader &, ReplyOnce &);
   void ccls_member(JsonReader &, ReplyOnce &);
   void ccls_navigate(JsonReader &, ReplyOnce &);
+  void ccls_toggleSourceHeader(JsonReader &, ReplyOnce &);
   void ccls_reload(JsonReader &);
   void ccls_vars(JsonReader &, ReplyOnce &);
   void exit(EmptyParam &);

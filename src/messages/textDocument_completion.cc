@@ -1,7 +1,6 @@
 // Copyright 2017-2018 ccls Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "fuzzy_match.hh"
 #include "include_complete.hh"
 #include "log.hh"
 #include "message_handler.hh"
@@ -16,6 +15,9 @@
 #if LLVM_VERSION_MAJOR < 8
 #include <regex>
 #endif
+
+#define FTS_FUZZY_MATCH_IMPLEMENTATION // create declarations in this tu
+#include "fts_fuzzy_match.hh"
 
 namespace ccls {
 using namespace clang;
@@ -141,6 +143,9 @@ void filterCandidates(CompletionList &result, const std::string &complete_text,
                                 begin_pos.character - overwrite_len};
     std::string sort(4, ' ');
     for (auto &item : items) {
+      if (item.textEdit.newText.back() == '"')
+        item.textEdit.newText.pop_back();
+
       item.textEdit.range = lsRange{begin_pos, end_pos};
       if (has_open_paren)
         item.textEdit.newText = item.filterText;
@@ -181,20 +186,38 @@ void filterCandidates(CompletionList &result, const std::string &complete_text,
   if (complete_text.size()) {
     // Fuzzy match and remove awful candidates.
     bool sensitive = g_config->completion.caseSensitivity;
-    FuzzyMatcher fuzzy(complete_text, sensitive);
     for (CompletionItem &item : items) {
       const std::string &filter =
           item.filterText.size() ? item.filterText : item.label;
-      item.score_ = reverseSubseqMatch(complete_text, filter, sensitive) >= 0
-                        ? fuzzy.match(filter, true)
-                        : FuzzyMatcher::kMinScore;
+      (void)fts::fuzzy_match(complete_text.data(), filter.data(), item.score_);
     }
     items.erase(std::remove_if(items.begin(), items.end(),
                                [](const CompletionItem &item) {
-                                 return item.score_ <= FuzzyMatcher::kMinScore;
+                                 return item.score_ <=
+                                        std::numeric_limits<int>::min();
                                }),
                 items.end());
+  }else {
+    for (CompletionItem &item : items) {
+        const std::string &filter =
+            item.filterText.size() ? item.filterText : item.label;
+
+        switch (item.kind) {
+        case ccls::CompletionItemKind::Snippet:
+            if (filter.find("override", 2) != std::string::npos) {
+            item.score_ = 100;
+            } else {
+            item.score_ = 90;
+            }
+
+            break;
+        default:
+            item.score_ = 0;
+            break;
+        }
+    }
   }
+
   std::sort(items.begin(), items.end(),
             [](const CompletionItem &lhs, const CompletionItem &rhs) {
               int t = int(lhs.additionalTextEdits.size() -

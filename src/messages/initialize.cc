@@ -297,7 +297,9 @@ void do_initialize(MessageHandler *m, InitializeParam &param,
       SmallString<256> path(g_config->cache.directory);
       sys::fs::make_absolute(project_path, path);
       // Use upper case for the Driver letter on Windows.
-      g_config->cache.directory = normalizePath(path.str());
+      g_config->cache.directory =
+          normalizePath(path.str()) + "/" +
+          std::to_string(hashUsr(g_config->cache.directory));
       ensureEndsInSlash(g_config->cache.directory);
     }
   }

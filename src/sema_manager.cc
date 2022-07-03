@@ -241,9 +241,20 @@ public:
     SourceLocation l = info.getLocation();
     if (!l.isValid())
       return;
-    const SourceManager &sm = info.getSourceManager();
-    StringRef filename = sm.getFilename(info.getLocation());
-    bool concerned = sm.isWrittenInMainFile(l);
+    SourceManager &sm = info.getSourceManager();
+    StringRef filename;
+    bool concerned = false;
+
+    if (l.isMacroID()) {
+      auto const temp = l.printToString(sm);
+      filename = {temp.substr(0, temp.find_first_of(':', 2))};
+      if (const FileEntry *F = sm.getFileEntryForID(sm.getMainFileID())) {
+        concerned = filename == F->getName().str();
+      }
+    } else {
+      filename = sm.getFilename(info.getLocation());
+      concerned = sm.isWrittenInMainFile(l);
+    }
     auto fillDiagBase = [&](DiagBase &d) {
       llvm::SmallString<64> message;
       info.FormatDiagnostic(message);
@@ -733,7 +744,8 @@ SemaManager::ensureSession(const std::string &path, bool *created) {
       for (auto &arg : session->file.args)
         (line += ' ') += arg;
     }
-    LOG_S(INFO) << "create session for " << path << line;
+    LOG_S(INFO) << "create session for " << path
+                << " tu: " << session->file.tuFile << line;
     sessions.insert(path, session);
     if (created)
       *created = true;

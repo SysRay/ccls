@@ -89,6 +89,26 @@ void DocumentUri::setPath(const std::string &path) {
 }
 
 std::string DocumentUri::getPath() const {
+  if (raw_uri.compare(0, 9, "perforce:") == 0) {
+#ifdef _WIN32
+    // perforce:///C
+    raw_uri = std::string("file:///") + raw_uri.substr(17, raw_uri.size() - 20);
+#else
+    // perforce:///etc
+    raw_uri = std::string("file://") + raw_uri.substr(16, raw_uri.size() - 20);
+#endif
+    isPerforce = true;
+  } else if (raw_uri.compare(0, 4, "git:") == 0) {
+#ifdef _WIN32
+    // git:///C
+    raw_uri = std::string("file:///") + raw_uri.substr(4);
+#else
+    // git:/etc
+    raw_uri = std::string("file://") + raw_uri.substr(4);
+#endif
+    isPerforce = true;
+  }
+
   if (raw_uri.compare(0, 7, "file://")) {
     LOG_S(WARNING)
         << "Received potentially bad URI (not starting with file://): "

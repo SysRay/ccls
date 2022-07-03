@@ -17,11 +17,14 @@ struct WorkingFiles;
 
 std::pair<LanguageId, bool> lookupExtension(std::string_view filename);
 
+int computeGuessScore(std::string_view a, std::string_view b);
+
 struct Project {
   struct Entry {
     std::string root;
     std::string directory;
     std::string filename;
+    std::string tuFile;
     std::vector<const char *> args;
     // If true, this entry is inferred and was not read from disk.
     bool is_inferred = false;

@@ -181,7 +181,6 @@ target_sources(ccls PRIVATE
   src/clang_tu.cc
   src/config.cc
   src/filesystem.cc
-  src/fuzzy_match.cc
   src/main.cc
   src/include_complete.cc
   src/indexer.cc

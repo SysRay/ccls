@@ -1,7 +1,6 @@
 // Copyright 2017-2018 ccls Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "fuzzy_match.hh"
 #include "log.hh"
 #include "message_handler.hh"
 #include "pipeline.hh"
@@ -17,6 +16,10 @@
 #include <ctype.h>
 #include <functional>
 #include <limits.h>
+
+#define FTS_FUZZY_MATCH_IMPLEMENTATION // create declarations in this tu
+#include "fts_fuzzy_match.hh"
+
 using namespace llvm;
 
 namespace ccls {
@@ -182,23 +185,23 @@ void MessageHandler::workspace_symbol(WorkspaceSymbolParam &param,
       goto done_add;
 done_add:
 
-  if (g_config->workspaceSymbol.sort && query.size() <= FuzzyMatcher::kMaxPat) {
+  if (g_config->workspaceSymbol.sort && query.size() <= 2555) {
     // Sort results with a fuzzy matching algorithm.
     int longest = 0;
     for (auto &cand : cands)
       longest = std::max(
           longest, int(db->getSymbolName(std::get<2>(cand), true).size()));
-    FuzzyMatcher fuzzy(query, g_config->workspaceSymbol.caseSensitivity);
     for (auto &cand : cands)
-      std::get<1>(cand) = fuzzy.match(
-          db->getSymbolName(std::get<2>(cand), std::get<1>(cand)), false);
+      fts::fuzzy_match(query.data(),
+        db->getSymbolName(std::get<2>(cand), std::get<1>(cand)).data(),
+        std::get<1>(cand));
     std::sort(cands.begin(), cands.end(), [](const auto &l, const auto &r) {
       return std::get<1>(l) > std::get<1>(r);
     });
     result.reserve(cands.size());
     for (auto &cand : cands) {
       // Discard awful candidates.
-      if (std::get<1>(cand) <= FuzzyMatcher::kMinScore)
+      if (std::get<1>(cand) <= 0.5 * std::numeric_limits<int>::min())
         break;
       result.push_back(std::get<0>(cand));
     }

@@ -161,6 +161,7 @@ MessageHandler::MessageHandler() {
   bind("$ccls/member", &MessageHandler::ccls_member);
   bind("$ccls/navigate", &MessageHandler::ccls_navigate);
   bind("$ccls/reload", &MessageHandler::ccls_reload);
+  bind("$ccls/toggleSourceHeader", &MessageHandler::ccls_toggleSourceHeader);
   bind("$ccls/vars", &MessageHandler::ccls_vars);
   bind("exit", &MessageHandler::exit);
   bind("initialize", &MessageHandler::initialize);

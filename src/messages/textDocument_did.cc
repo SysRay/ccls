@@ -20,6 +20,9 @@ void MessageHandler::textDocument_didChange(TextDocumentDidChangeParam &param) {
 }
 
 void MessageHandler::textDocument_didClose(TextDocumentParam &param) {
+  if (param.textDocument.uri.isPerforce)
+    return;
+
   std::string path = param.textDocument.uri.getPath();
   wfiles->onClose(path);
   manager->onClose(path);
@@ -27,6 +30,9 @@ void MessageHandler::textDocument_didClose(TextDocumentParam &param) {
 }
 
 void MessageHandler::textDocument_didOpen(DidOpenTextDocumentParam &param) {
+  if (param.textDocument.uri.isPerforce)
+    return;
+
   std::string path = param.textDocument.uri.getPath();
   WorkingFile *wf = wfiles->onOpen(param.textDocument);
   if (std::optional<std::string> cached_file_contents =
@@ -53,6 +59,9 @@ void MessageHandler::textDocument_didOpen(DidOpenTextDocumentParam &param) {
 }
 
 void MessageHandler::textDocument_didSave(TextDocumentParam &param) {
+  if (param.textDocument.uri.isPerforce)
+    return;
+
   const std::string &path = param.textDocument.uri.getPath();
   pipeline::index(path, {}, IndexMode::Normal, false);
   manager->onSave(path);

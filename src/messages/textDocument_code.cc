@@ -115,6 +115,25 @@ void MessageHandler::textDocument_codeLens(TextDocumentParam &param,
         continue;
       std::vector<Use> base_uses = getUsesForAllBases(db, func);
       std::vector<Use> derived_uses = getUsesForAllDerived(db, func);
+
+       if (def->bases.size() && db->hasFunc(def->bases[0]) &&
+          db->getFunc(def->bases[0]).anyDef() != nullptr) {
+        std::string baseNameS = {
+            db->getFunc(def->bases[0]).anyDef()->name(true).data()};
+
+        baseNameS = baseNameS.substr(0, baseNameS.find_first_of('('));
+
+        if (std::count(baseNameS.begin(), baseNameS.end(), ':') > 2) {
+          baseNameS = baseNameS.substr(0, baseNameS.find_last_of(':') - 1);
+        }
+        if (std::count(baseNameS.begin(), baseNameS.end(), ':') > 2) {
+          baseNameS = baseNameS.substr(baseNameS.find_last_of(':') + 1);
+        }
+
+        add(baseNameS.data(), {sym.usr, Kind::Func, "bases"}, sym.range,
+            def->bases.size());
+      }
+
       add("ref", {sym.usr, Kind::Func, "uses"}, sym.range, func.uses.size(),
           base_uses.empty());
       if (base_uses.size())
@@ -123,9 +142,6 @@ void MessageHandler::textDocument_codeLens(TextDocumentParam &param,
       if (derived_uses.size())
         add("d.ref", {sym.usr, Kind::Func, "derived uses"}, sym.range,
             derived_uses.size());
-      if (base_uses.empty())
-        add("base", {sym.usr, Kind::Func, "bases"}, sym.range,
-            def->bases.size());
       add("derived", {sym.usr, Kind::Func, "derived"}, sym.range,
           func.derived.size());
       break;

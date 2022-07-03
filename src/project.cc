@@ -34,6 +34,7 @@
 #include <limits.h>
 #include <unordered_set>
 #include <vector>
+#include <filesystem>
 
 using namespace clang;
 using namespace llvm;
@@ -162,10 +163,11 @@ struct ProjectProcessor {
     }
     if (!command_set.insert(hash).second)
       return;
-    auto args = entry.args;
+
+    std::vector<const char *> args = g_config->clang.extraArgs;
+    args.insert(args.end(), entry.args.begin(), entry.args.end());
     args.push_back("-fsyntax-only");
-    for (const std::string &arg : g_config->clang.extraArgs)
-      args.push_back(intern(arg));
+
     args.push_back(intern("-working-directory=" + entry.directory));
     args.push_back(intern("-resource-dir=" + g_config->clang.resourceDir));
 
@@ -309,6 +311,18 @@ void loadDirectoryListing(ProjectProcessor &proc, const std::string &root,
     }
 }
 
+void checkPath(std::string const &arg) {
+  if (arg[0] == '.') return;
+  static std::unordered_map<std::string, int> pathList;
+  auto pathListPair = pathList.insert({arg, 0});
+  if (pathListPair.second) {
+    if (!std::filesystem::exists(std::filesystem::path(arg))) {
+      LOG_S(ERROR) << "Path does not exist: " << arg;
+    }
+  }
+}
+} // namespace
+
 // Computes a score based on how well |a| and |b| match. This is used for
 // argument guessing.
 int computeGuessScore(std::string_view a, std::string_view b) {
@@ -348,8 +362,6 @@ int computeGuessScore(std::string_view a, std::string_view b) {
       d[c]--, score++;
   return score;
 }
-
-} // namespace
 
 void Project::loadDirectory(const std::string &root, Project::Folder &folder) {
   SmallString<256> cdbDir, path, stdinPath;
@@ -432,21 +444,59 @@ void Project::loadDirectory(const std::string &root, Project::Folder &folder) {
 
       // If workspace folder is real/ but entries use symlink/, convert to
       // real/.
-      entry.directory = realPath(cmd.Directory);
-      normalizeFolder(entry.directory);
+      entry.directory = cmd.Directory;
       doPathMapping(entry.directory);
-      entry.filename =
-          realPath(resolveIfRelative(entry.directory, cmd.Filename));
-      normalizeFolder(entry.filename);
+      entry.directory = realPath(entry.directory);
+      normalizeFolder(entry.directory);
+      
+      entry.filename = cmd.Filename;
       doPathMapping(entry.filename);
+      entry.filename =
+          realPath(resolveIfRelative(entry.directory, entry.filename));
+      normalizeFolder(entry.filename);
+      
+
+      LOG_S(INFO) << "dir: " << entry.directory;
+      LOG_S(INFO) << "file: " << entry.filename;
+      
+      entry.tuFile = entry.filename;
+
+      checkPath(entry.root);
+      checkPath(entry.directory);
+      checkPath(entry.filename);
+      checkPath(entry.tuFile);
 
       std::vector<std::string> args = std::move(cmd.CommandLine);
-      entry.args.reserve(args.size());
+      entry.args.reserve(args.size()+1);
       for (int i = 0; i < args.size(); i++) {
-        doPathMapping(args[i]);
-        if (!proc.excludesArg(args[i], i))
-          entry.args.push_back(intern(args[i]));
+        std::string *arg = &args[i];
+        if (arg->compare(0, 2, "-I") == 0) {
+          if (arg->size() < 3) {
+            arg = &args[i + 1];
+            *arg = std::string("-I") + *arg;
+          }
+          doPathMapping(*arg);
+          checkPath(arg->substr(2));
+        } else if (arg->compare(0, 8, "-isystem") == 0) {
+          if (arg->size() < 9) {
+            arg = &args[i + 1];
+            *arg = std::string("-isystem") + *arg;
+          }
+          doPathMapping(*arg);
+          checkPath(arg->substr(8));
+        }
+        // Default args, no filtering
+        else if (arg->compare(0, 2, "-x") == 0 ||
+                 arg->compare(0, 2, "-D") == 0) {
+        } 
+        else if (proc.excludesArg(args[i], i) != g_config->clang.excludeArgsIsWhitelist) 
+            continue;
+
+         entry.args.push_back(intern(args[i]));
       }
+      // Add filename 
+      if(g_config->clang.excludeArgsIsWhitelist) entry.args.push_back(intern(entry.filename));
+
       entry.compdb_size = entry.args.size();
 
       // Work around relative --sysroot= as it isn't affected by
@@ -560,7 +610,7 @@ Project::Entry Project::findEntry(const std::string &path, bool can_redirect,
               // Decrease score if .c is matched against .hh
               auto [lang1, header1] = lookupExtension(e.filename);
               if (lang != lang1 && !(lang == LanguageId::C && header))
-                score -= 30;
+                score -= 200;
               if (score > best_score) {
                 best_score = score;
                 best_compdb_folder = &folder;
@@ -578,6 +628,7 @@ Project::Entry Project::findEntry(const std::string &path, bool can_redirect,
       // separately.
       ret.root = best->root;
       ret.directory = best->directory;
+      ret.tuFile = best->filename;
       ret.args = best->args;
       if (best->compdb_size) // delete trailing .ccls options if exist
         ret.args.resize(best->compdb_size);
@@ -594,9 +645,13 @@ Project::Entry Project::findEntry(const std::string &path, bool can_redirect,
     ProjectProcessor(*best_compdb_folder).process(ret);
   else if (best_dot_ccls_folder)
     ProjectProcessor(*best_dot_ccls_folder).process(ret);
-  for (const std::string &arg : g_config->clang.extraArgs)
-    ret.args.push_back(intern(arg));
+
+   auto const argsTemp = ret.args;
+  std::vector<const char *> ret.args = g_config->clang.extraArgs;
+   args.insert(ret.args.end(), argsTemp.args.begin(), argsTemp.args.end());
+
   ret.args.push_back(intern("-working-directory=" + ret.directory));
+
   return ret;
 }
 
