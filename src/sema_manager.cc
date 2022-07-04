@@ -178,11 +178,19 @@ public:
       : sm(sm), out(out) {}
   void InclusionDirective(SourceLocation hashLoc, const Token &includeTok,
                           StringRef fileName, bool isAngled,
-                          CharSourceRange filenameRange, const FileEntry *file,
+                          CharSourceRange filenameRange,
+#if LLVM_VERSION_MAJOR >= 15 // llvmorg-15-init-7692-gd79ad2f1dbc2
+                          llvm::Optional<FileEntryRef> fileRef,
+#else
+                          const FileEntry *file,
+#endif
                           StringRef searchPath, StringRef relativePath,
                           const clang::Module *imported,
                           SrcMgr::CharacteristicKind fileKind) override {
     (void)sm;
+#if LLVM_VERSION_MAJOR >= 15 // llvmorg-15-init-7692-gd79ad2f1dbc2
+    const FileEntry *file = fileRef ? &fileRef->getFileEntry() : nullptr;
+#endif
     if (file && seen.insert(file).second)
       out.emplace_back(pathFromFileEntry(*file), file->getModificationTime());
   }
@@ -241,20 +249,9 @@ public:
     SourceLocation l = info.getLocation();
     if (!l.isValid())
       return;
-    SourceManager &sm = info.getSourceManager();
-    StringRef filename;
-    bool concerned = false;
-
-    if (l.isMacroID()) {
-      auto const temp = l.printToString(sm);
-      filename = {temp.substr(0, temp.find_first_of(':', 2))};
-      if (const FileEntry *F = sm.getFileEntryForID(sm.getMainFileID())) {
-        concerned = filename == F->getName().str();
-      }
-    } else {
-      filename = sm.getFilename(info.getLocation());
-      concerned = sm.isWrittenInMainFile(l);
-    }
+    const SourceManager &sm = info.getSourceManager();
+    StringRef filename = sm.getFilename(info.getLocation());
+    bool concerned = isInsideMainFile(sm, l);
     auto fillDiagBase = [&](DiagBase &d) {
       llvm::SmallString<64> message;
       info.FormatDiagnostic(message);
@@ -338,19 +335,26 @@ buildCompilerInstance(Session &session, std::unique_ptr<CompilerInvocation> ci,
 
 bool parse(CompilerInstance &clang) {
   SyntaxOnlyAction action;
-  if (!action.BeginSourceFile(clang, clang.getFrontendOpts().Inputs[0]))
-    return false;
+  llvm::CrashRecoveryContext crc;
+  bool ok = false;
+  auto run = [&]() {
+    if (!action.BeginSourceFile(clang, clang.getFrontendOpts().Inputs[0]))
+      return;
 #if LLVM_VERSION_MAJOR >= 9 // rL364464
-  if (llvm::Error e = action.Execute()) {
-    llvm::consumeError(std::move(e));
-    return false;
-  }
+    if (llvm::Error e = action.Execute()) {
+      llvm::consumeError(std::move(e));
+      return;
+    }
 #else
-  if (!action.Execute())
-    return false;
+    if (!action.Execute())
+      return;
 #endif
-  action.EndSourceFile();
-  return true;
+    action.EndSourceFile();
+    ok = true;
+  };
+  if (!crc.RunSafely(run))
+    LOG_S(ERROR) << "clang crashed";
+  return ok;
 }
 
 void buildPreamble(Session &session, CompilerInvocation &ci,
@@ -361,10 +365,19 @@ void buildPreamble(Session &session, CompilerInvocation &ci,
   std::string content = session.wfiles->getContent(task.path);
   std::unique_ptr<llvm::MemoryBuffer> buf =
       llvm::MemoryBuffer::getMemBuffer(content);
+#if LLVM_VERSION_MAJOR >= 12
+  // llvmorg-12-init-11522-g4c55c3b66de
+  auto bounds = ComputePreambleBounds(*ci.getLangOpts(), *buf, 0);
+  // llvmorg-12-init-17739-gf4d02fbe418d
+  if (!task.from_diag && oldP &&
+      oldP->preamble.CanReuse(ci, *buf, bounds, *fs))
+    return;
+#else
   auto bounds = ComputePreambleBounds(*ci.getLangOpts(), buf.get(), 0);
   if (!task.from_diag && oldP &&
       oldP->preamble.CanReuse(ci, buf.get(), bounds, fs.get()))
     return;
+#endif
   // -Werror makes warnings issued as errors, which stops parsing
   // prematurely because of -ferror-limit=. This also works around the issue
   // of -Werror + -Wunused-parameter in interaction with SkipFunctionBodies.
@@ -416,7 +429,8 @@ void *preambleMain(void *manager_) {
   auto *manager = static_cast<SemaManager *>(manager_);
   set_thread_name("preamble");
   while (true) {
-    SemaManager::PreambleTask task = manager->preamble_tasks.dequeue();
+    SemaManager::PreambleTask task = manager->preamble_tasks.dequeue(
+        g_config ? g_config->session.maxNum : 0);
     if (pipeline::g_quit.load(std::memory_order_relaxed))
       break;
 
@@ -483,8 +497,13 @@ void *completionMain(void *manager_) {
     DiagnosticConsumer dc;
     std::string content = manager->wfiles->getContent(task->path);
     auto buf = llvm::MemoryBuffer::getMemBuffer(content);
+#if LLVM_VERSION_MAJOR >= 12 // llvmorg-12-init-11522-g4c55c3b66de
+    PreambleBounds bounds =
+        ComputePreambleBounds(*ci->getLangOpts(), *buf, 0);
+#else
     PreambleBounds bounds =
         ComputePreambleBounds(*ci->getLangOpts(), buf.get(), 0);
+#endif
     bool in_preamble =
         getOffsetForPosition({task->position.line, task->position.character},
                              content) < (int)bounds.Size;
@@ -558,6 +577,10 @@ void *diagnosticMain(void *manager_) {
     std::shared_ptr<PreambleData> preamble = session->getPreamble();
     IntrusiveRefCntPtr<llvm::vfs::FileSystem> fs =
         preamble ? preamble->stat_cache->consumer(session->fs) : session->fs;
+    std::unique_ptr<CompilerInvocation> ci =
+        buildCompilerInvocation(task.path, session->file.args, fs);
+    if (!ci)
+      continue;
     if (preamble) {
       bool rebuild = false;
       {
@@ -569,16 +592,25 @@ void *diagnosticMain(void *manager_) {
             rebuild = true;
           }
       }
+      if (!rebuild) {
+        std::string content = manager->wfiles->getContent(task.path);
+        auto buf = llvm::MemoryBuffer::getMemBuffer(content);
+#if LLVM_VERSION_MAJOR >= 12 // llvmorg-12-init-11522-g4c55c3b66de
+        PreambleBounds bounds =
+            ComputePreambleBounds(*ci->getLangOpts(), *buf, 0);
+#else
+        PreambleBounds bounds =
+            ComputePreambleBounds(*ci->getLangOpts(), buf.get(), 0);
+#endif
+        if (bounds.Size != preamble->preamble.getBounds().Size)
+          rebuild = true;
+      }
       if (rebuild) {
         manager->preamble_tasks.pushBack({task.path, nullptr, true}, true);
         continue;
       }
     }
 
-    std::unique_ptr<CompilerInvocation> ci =
-        buildCompilerInvocation(task.path, session->file.args, fs);
-    if (!ci)
-      continue;
     // If main file is a header, add -Wno-unused-function
     if (lookupExtension(session->file.filename).second)
       ci->getDiagnosticOpts().Warnings.push_back("no-unused-function");

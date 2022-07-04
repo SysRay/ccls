@@ -81,6 +81,10 @@ public:
                                  ,
                                  SourceLocation openParLoc
 #endif
+#if LLVM_VERSION_MAJOR >= 14
+                                 ,
+                                 bool braced
+#endif
                                  ) override {
     ls_sighelp.activeParameter = (int)currentArg;
     for (unsigned i = 0; i < numCandidates; i++) {
@@ -93,7 +97,11 @@ public:
           cand = OverloadCandidate(pattern);
 
       const auto *ccs =
+#if LLVM_VERSION_MAJOR >= 14
+          cand.CreateSignatureString(currentArg, s, *alloc, cCTUInfo, true, braced);
+#else
           cand.CreateSignatureString(currentArg, s, *alloc, cCTUInfo, true);
+#endif
 
       const char *ret_type = nullptr;
       SignatureInformation &ls_sig = ls_sighelp.signatures.emplace_back();
@@ -156,8 +164,7 @@ void MessageHandler::textDocument_signatureHelp(
     buffer_line = wf->buffer_lines[param.position.line];
   {
     std::string filter;
-    Position end_pos;
-    begin_pos = wf->getCompletionPosition(param.position, &filter, &end_pos);
+    begin_pos = wf->getCompletionPosition(param.position, &filter);
   }
 
   SemaManager::OnComplete callback =

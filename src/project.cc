@@ -446,7 +446,6 @@ void Project::loadDirectory(const std::string &root, Project::Folder &folder) {
       // real/.
       entry.directory = cmd.Directory;
       doPathMapping(entry.directory);
-      entry.directory = realPath(entry.directory);
       normalizeFolder(entry.directory);
       
       entry.filename = cmd.Filename;
@@ -467,20 +466,28 @@ void Project::loadDirectory(const std::string &root, Project::Folder &folder) {
       checkPath(entry.tuFile);
 
       std::vector<std::string> args = std::move(cmd.CommandLine);
-      entry.args.reserve(args.size()+1);
-      for (int i = 0; i < args.size(); i++) {
+      entry.args.reserve(1+args.size()+g_config->clang.extraArgs.size());
+
+      // Skip first (compiler path) and last (filename)
+      entry.args.push_back(intern("clang"));
+      for (const std::string &arg : g_config->clang.extraArgs)
+        entry.args.push_back(intern(arg));
+
+      for (int i = 1; i < args.size()-1; i++) {
         std::string *arg = &args[i];
         if (arg->compare(0, 2, "-I") == 0) {
+          // if its seperated with space (-I file), we only get -I -> combine with next
           if (arg->size() < 3) {
-            arg = &args[i + 1];
-            *arg = std::string("-I") + *arg;
+            ++i;
+            *arg = std::string("-I") + args[i];
           }
           doPathMapping(*arg);
           checkPath(arg->substr(2));
         } else if (arg->compare(0, 8, "-isystem") == 0) {
+          // if its seperated with space (-isystem file), we only get -isystem -> combine with next
           if (arg->size() < 9) {
-            arg = &args[i + 1];
-            *arg = std::string("-isystem") + *arg;
+            ++i;
+            *arg = std::string("-isystem") + args[i];
           }
           doPathMapping(*arg);
           checkPath(arg->substr(8));
@@ -492,10 +499,10 @@ void Project::loadDirectory(const std::string &root, Project::Folder &folder) {
         else if (proc.excludesArg(args[i], i) != g_config->clang.excludeArgsIsWhitelist) 
             continue;
 
-         entry.args.push_back(intern(args[i]));
+         entry.args.push_back(intern(*arg));
       }
-      // Add filename 
-      if(g_config->clang.excludeArgsIsWhitelist) entry.args.push_back(intern(entry.filename));
+      // Add mapped filename 
+      entry.args.push_back(intern(entry.filename));
 
       entry.compdb_size = entry.args.size();
 
@@ -646,12 +653,7 @@ Project::Entry Project::findEntry(const std::string &path, bool can_redirect,
   else if (best_dot_ccls_folder)
     ProjectProcessor(*best_dot_ccls_folder).process(ret);
 
-   auto const argsTemp = ret.args;
-  std::vector<const char *> ret.args = g_config->clang.extraArgs;
-   args.insert(ret.args.end(), argsTemp.args.begin(), argsTemp.args.end());
-
   ret.args.push_back(intern("-working-directory=" + ret.directory));
-
   return ret;
 }
 

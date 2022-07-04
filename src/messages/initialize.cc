@@ -226,9 +226,10 @@ struct InitializeResult {
     const char *name = "ccls";
     const char *version = CCLS_VERSION;
   } serverInfo;
+  const char *offsetEncoding = "utf-32";
 };
 REFLECT_STRUCT(InitializeResult::ServerInfo, name, version);
-REFLECT_STRUCT(InitializeResult, capabilities, serverInfo);
+REFLECT_STRUCT(InitializeResult, capabilities, serverInfo, offsetEncoding);
 
 struct FileSystemWatcher {
   std::string globPattern = "**/*";
@@ -256,7 +257,10 @@ void *indexer(void *arg_) {
   delete arg;
   std::string name = "indexer" + std::to_string(idx);
   set_thread_name(name.c_str());
-#if LLVM_ENABLE_THREADS && LLVM_VERSION_MAJOR >= 9
+  // Don't lower priority on __APPLE__. getpriority(2) says "When setting a
+  // thread into background state the scheduling priority is set to lowest
+  // value, disk and network IO are throttled."
+#if LLVM_ENABLE_THREADS && LLVM_VERSION_MAJOR >= 9 && !defined(__APPLE__)
   set_thread_priority(ThreadPriority::Background);
 #endif
   pipeline::indexer_Main(h->manager, h->vfs, h->project, h->wfiles);
@@ -357,7 +361,7 @@ void do_initialize(MessageHandler *m, InitializeParam &param,
   std::sort(workspaceFolders.begin(), workspaceFolders.end(),
             [](auto &l, auto &r) { return l.first.size() > r.first.size(); });
   for (auto &[folder, real] : workspaceFolders)
-    if (real.empty())
+    if (real == folder)
       LOG_S(INFO) << "workspace folder: " << folder;
     else
       LOG_S(INFO) << "workspace folder: " << folder << " -> " << real;

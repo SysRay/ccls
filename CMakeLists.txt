@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(ccls LANGUAGES CXX)
+project(ccls LANGUAGES CXX C)
 
 option(USE_SYSTEM_RAPIDJSON "Use system RapidJSON instead of the git submodule if exists" ON)
 
@@ -30,6 +30,7 @@ set_property(TARGET ccls PROPERTY CXX_STANDARD 17)
 set_property(TARGET ccls PROPERTY CXX_STANDARD_REQUIRED ON)
 set_property(TARGET ccls PROPERTY CXX_EXTENSIONS OFF)
 
+set(CMAKE_EXE_LINKER_FLAGS "-Wl,-export-dynamic")
 # CMake sets MSVC for both MSVC and Clang(Windows)
 if(MSVC)
   # Common MSVC/Clang(Windows) options
@@ -45,6 +46,7 @@ if(MSVC)
     /wd4800
     /wd4068 # Disable unknown pragma warning
     /std:c++17
+    /Zc:__cplusplus
     $<$<CONFIG:Debug>:/FS>
   )
   # relink system libs
@@ -120,6 +122,10 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL FreeBSD)
   target_link_libraries(ccls PRIVATE thr)
 endif()
 
+if(LLVM_ENABLE_ZLIB)
+  find_package(ZLIB)
+endif()
+
 ### Definitions
 
 # Find Clang resource directory with Clang executable.
@@ -150,10 +156,21 @@ set_property(SOURCE src/utils.cc APPEND PROPERTY COMPILE_DEFINITIONS
 ### Includes
 
 if(USE_SYSTEM_RAPIDJSON)
-  find_package(RapidJSON QUIET)
+  set(RapidJSON_MIN_VERSION "1.1.0")
+  find_package(RapidJSON ${RapidJSON_MIN_VERSION} QUIET)
+  if(NOT DEFINED RapidJSON_INCLUDE_DIRS AND DEFINED RAPIDJSON_INCLUDE_DIRS)
+    set(RapidJSON_INCLUDE_DIRS "${RAPIDJSON_INCLUDE_DIRS}")
+  endif()
 endif()
 if(NOT RapidJSON_FOUND)
-  set(RapidJSON_INCLUDE_DIRS third_party/rapidjson/include)
+  if(EXISTS "${CMAKE_SOURCE_DIR}/third_party/rapidjson/include")
+    message(STATUS "Using local RapidJSON")
+    set(RapidJSON_INCLUDE_DIRS third_party/rapidjson/include)
+  else()
+    message(STATUS "Plase initialize rapidJSON git submodule as currently installed version is to old:")
+    message(STATUS "git submodule init && git submodule update")
+    message(FATAL_ERROR "RapidJSON version is likely too old. See https://github.com/MaskRay/ccls/issues/455")
+  endif()
 endif()
 
 target_include_directories(ccls PRIVATE src)

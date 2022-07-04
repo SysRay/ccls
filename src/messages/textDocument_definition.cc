@@ -75,6 +75,76 @@ void MessageHandler::textDocument_definition(TextDocumentPositionParam &param,
         result.push_back(loc);
   }
 
+  if (result.empty()) {
+    Maybe<Range> range;
+    // Check #include
+    for (const IndexInclude &include : file->def->includes) {
+      if (include.line == ls_pos.line) {
+        result.push_back(
+            {DocumentUri::fromPath(include.resolved_path).raw_uri});
+        range = {{0, 0}, {0, 0}};
+        break;
+      }
+    }
+    // Find the best match of the identifier at point.
+    if (!range) {
+      Position position = param.position;
+      const std::string &buffer = wf->buffer_content;
+      std::string_view query = lexIdentifierAroundPos(position, buffer);
+      std::string_view short_query = query;
+      {
+        auto pos = query.rfind(':');
+        if (pos != std::string::npos)
+          short_query = query.substr(pos + 1);
+      }
+
+      // For symbols whose short/detailed names contain |query| as a
+      // substring, we use the tuple <length difference, negative position,
+      // not in the same file, line distance> to find the best match.
+      std::tuple<int, int, bool, int> best_score{INT_MAX, 0, true, 0};
+      SymbolIdx best_sym;
+      best_sym.kind = Kind::Invalid;
+      auto fn = [&](SymbolIdx sym) {
+        std::string_view short_name = db->getSymbolName(sym, false),
+                         name = short_query.size() < query.size()
+                                    ? db->getSymbolName(sym, true)
+                                    : short_name;
+        if (short_name != short_query)
+          return;
+        if (Maybe<DeclRef> dr = getDefinitionSpell(db, sym)) {
+          std::tuple<int, int, bool, int> score{
+              int(name.size() - short_query.size()), 0, dr->file_id != file_id,
+              std::abs(dr->range.start.line - position.line)};
+          // Update the score with qualified name if the qualified name
+          // occurs in |name|.
+          auto pos = name.rfind(query);
+          if (pos != std::string::npos) {
+            std::get<0>(score) = int(name.size() - query.size());
+            std::get<1>(score) = -int(pos);
+          }
+          if (score < best_score) {
+            best_score = score;
+            best_sym = sym;
+          }
+        }
+      };
+      for (auto &func : db->funcs)
+        fn({func.usr, Kind::Func});
+      for (auto &type : db->types)
+        fn({type.usr, Kind::Type});
+      for (auto &var : db->vars)
+        if (var.def.size() && !var.def[0].is_local())
+          fn({var.usr, Kind::Var});
+
+      if (best_sym.kind != Kind::Invalid) {
+        Maybe<DeclRef> dr = getDefinitionSpell(db, best_sym);
+        assert(dr);
+        if (auto loc = getLocationLink(db, wfiles, *dr))
+          result.push_back(loc);
+      }
+    }
+  }
+
   reply.replyLocationLink(result);
 }
 

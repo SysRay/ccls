@@ -7,12 +7,16 @@ namespace ccls {
 Config *g_config;
 
 void doPathMapping(std::string &arg) {
+  std::replace( arg.begin(), arg.end(), '\\', '/');
+
   for (const std::string &mapping : g_config->clang.pathMappings) {
     auto sep = mapping.find('>');
     if (sep != std::string::npos) {
       auto p = arg.find(mapping.substr(0, sep));
-      if (p != std::string::npos)
+      if (p != std::string::npos){
         arg.replace(p, sep, mapping.substr(sep + 1));
+        break;
+      }
     }
   }
 }

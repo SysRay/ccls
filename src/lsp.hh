@@ -220,6 +220,17 @@ struct TextDocumentDidChangeParam {
   std::vector<TextDocumentContentChangeEvent> contentChanges;
 };
 
+struct WorkDoneProgress {
+  const char *kind;
+  std::optional<std::string> title;
+  std::optional<std::string> message;
+  std::optional<int> percentage;
+};
+struct WorkDoneProgressParam {
+  const char *token;
+  WorkDoneProgress value;
+};
+
 struct WorkspaceFolder {
   DocumentUri uri;
   std::string name;

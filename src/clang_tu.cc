@@ -12,6 +12,7 @@
 #include <clang/Driver/Driver.h>
 #include <clang/Driver/Tool.h>
 #include <clang/Lex/Lexer.h>
+#include <clang/Lex/PreprocessorOptions.h>
 #include <llvm/Support/Host.h>
 #include <llvm/Support/Path.h>
 
@@ -19,12 +20,29 @@ using namespace clang;
 
 namespace ccls {
 std::string pathFromFileEntry(const FileEntry &file) {
-  StringRef name = file.tryGetRealPathName();
-  if (name.empty())
-    name = file.getName();
-  std::string ret = normalizePath(name);
-  // Resolve symlinks outside of workspace folders, e.g. /usr/include/c++/7.3.0
-  return normalizeFolder(ret) ? ret : realPath(ret);
+  std::string ret;
+  if (file.getName().startswith("/../")) {
+    // Resolve symlinks outside of working folders. This handles leading path
+    // components, e.g. (/lib -> /usr/lib) in
+    // /../lib/gcc/x86_64-linux-gnu/10/../../../../include/c++/10/utility
+    ret = file.tryGetRealPathName();
+  } else {
+    // If getName() refers to a file within a workspace folder, we prefer it
+    // (which may be a symlink).
+    ret = normalizePath(file.getName());
+  }
+  if (normalizeFolder(ret))
+    return ret;
+  ret = realPath(ret);
+  normalizeFolder(ret);
+  return ret;
+}
+
+bool isInsideMainFile(const SourceManager &sm, SourceLocation sl) {
+  if (!sl.isValid())
+    return false;
+  FileID fid = sm.getFileID(sm.getExpansionLoc(sl));
+  return fid == sm.getMainFileID() || fid == sm.getPreambleFileID();
 }
 
 static Pos decomposed2LineAndCol(const SourceManager &sm,
@@ -97,7 +115,11 @@ buildCompilerInvocation(const std::string &main, std::vector<const char *> args,
   IntrusiveRefCntPtr<DiagnosticsEngine> diags(
       CompilerInstance::createDiagnostics(new DiagnosticOptions,
                                           new IgnoringDiagConsumer, true));
+#if LLVM_VERSION_MAJOR < 12 // llvmorg-12-init-5498-g257b29715bb
   driver::Driver d(args[0], llvm::sys::getDefaultTargetTriple(), *diags, vfs);
+#else
+  driver::Driver d(args[0], llvm::sys::getDefaultTargetTriple(), *diags, "ccls", vfs);
+#endif
   d.setCheckInputsExist(false);
   std::unique_ptr<driver::Compilation> comp(d.BuildCompilation(args));
   if (!comp)
@@ -138,9 +160,21 @@ buildCompilerInvocation(const std::string &main, std::vector<const char *> args,
   // Enable IndexFrontendAction::shouldSkipFunctionBody.
   ci->getFrontendOpts().SkipFunctionBodies = true;
   ci->getLangOpts()->SpellChecking = false;
+#if LLVM_VERSION_MAJOR >= 11
+  ci->getLangOpts()->RecoveryAST = true;
+  ci->getLangOpts()->RecoveryASTType = true;
+#endif
   auto &isec = ci->getFrontendOpts().Inputs;
   if (isec.size())
     isec[0] = FrontendInputFile(main, isec[0].getKind(), isec[0].isSystem());
+#if LLVM_VERSION_MAJOR >= 10 // llvmorg-11-init-2414-g75f09b54429
+  ci->getPreprocessorOpts().DisablePragmaDebugCrash = true;
+#endif
+  // clangSerialization has an unstable format. Disable PCH reading/writing
+  // to work around PCH mismatch problems.
+  ci->getPreprocessorOpts().ImplicitPCHInclude.clear();
+  ci->getPreprocessorOpts().PrecompiledPreambleBytes = {0, false};
+  ci->getPreprocessorOpts().PCHThroughHeader.clear();
   return ci;
 }
 

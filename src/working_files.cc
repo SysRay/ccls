@@ -339,18 +339,14 @@ std::optional<int> WorkingFile::getIndexPosFromBufferPos(int line, int *column,
                           index_lines, is_end);
 }
 
-Position WorkingFile::getCompletionPosition(Position pos, std::string *filter,
-                                            Position *replace_end_pos) const {
+Position WorkingFile::getCompletionPosition(Position pos, std::string *filter) const {
   int start = getOffsetForPosition(pos, buffer_content);
   int i = start;
-  while (i > 0 && isIdentifierBody(buffer_content[i - 1]))
+#if LLVM_VERSION_MAJOR < 14 // llvmorg-14-init-3863-g601102d282d5
+#define isAsciiIdentifierContinue isIdentifierBody
+#endif
+  while (i > 0 && isAsciiIdentifierContinue(buffer_content[i - 1]))
     --i;
-
-  *replace_end_pos = pos;
-  for (int i = start;
-       i < buffer_content.size() && isIdentifierBody(buffer_content[i]); i++)
-    replace_end_pos->character++;
-
   *filter = buffer_content.substr(i, start - i);
   return getPositionForOffset(buffer_content, i);
 }
@@ -462,10 +458,10 @@ std::string_view lexIdentifierAroundPos(Position position,
     c = content[start - 1];
     if (c == ':' && start > 1 && content[start - 2] == ':')
       start--;
-    else if (!isIdentifierBody(c))
+    else if (!isAsciiIdentifierContinue(c))
       break;
   }
-  for (; end < content.size() && isIdentifierBody(content[end]); end++)
+  for (; end < content.size() && isAsciiIdentifierContinue(content[end]); end++)
     ;
 
   return content.substr(start, end - start);
