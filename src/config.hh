@@ -88,6 +88,7 @@ struct Config {
     // ["-fopenmp", "-m*", "-Wall"].
     std::vector<std::string> excludeArgs;
 
+    bool excludeArgsIsWhitelist = false;
     // Additional arguments to pass to clang.
     std::vector<std::string> extraArgs;
 
@@ -330,7 +331,7 @@ REFLECT_STRUCT(Config::ServerCap::Workspace::WorkspaceFolders, supported,
 REFLECT_STRUCT(Config::ServerCap::Workspace, workspaceFolders);
 REFLECT_STRUCT(Config::ServerCap, documentOnTypeFormattingProvider,
                foldingRangeProvider, workspace);
-REFLECT_STRUCT(Config::Clang, excludeArgs, extraArgs, pathMappings,
+REFLECT_STRUCT(Config::Clang, excludeArgs, excludeArgsIsWhitelist, extraArgs, pathMappings,
                resourceDir);
 REFLECT_STRUCT(Config::ClientCapability, diagnosticsRelatedInformation,
                hierarchicalDocumentSymbolSupport, linkSupport, snippetSupport);

@@ -31,6 +31,7 @@
 #endif
 
 #include <array>
+#include <filesystem>
 #include <limits.h>
 #include <unordered_set>
 #include <vector>
@@ -49,7 +50,8 @@ std::pair<LanguageId, bool> lookupExtension(std::string_view filename) {
   LanguageId ret;
   if (types::isCXX(i))
     ret = types::isCuda(i) ? LanguageId::Cuda
-                           : objc ? LanguageId::ObjCpp : LanguageId::Cpp;
+          : objc           ? LanguageId::ObjCpp
+                           : LanguageId::Cpp;
   else if (objc)
     ret = LanguageId::ObjC;
   else if (i == types::TY_C || i == types::TY_CHeader)
@@ -94,9 +96,12 @@ struct ProjectProcessor {
       i++;
       return true;
     }
-    return exclude_args.count(arg) ||
-           any_of(exclude_globs,
-                  [&](const GlobPattern &glob) { return glob.match(arg); });
+
+    bool const ret = (exclude_args.count(arg) ||
+                      any_of(exclude_globs, [&](const GlobPattern &glob) {
+                        return glob.match(arg);
+                      }));
+    return g_config->clang.excludeArgsIsWhitelist ? !ret : ret;
   }
 
   // Expand %c %cpp ... in .ccls
@@ -349,6 +354,17 @@ int computeGuessScore(std::string_view a, std::string_view b) {
   return score;
 }
 
+void checkPath(std::string const &arg) {
+  if (arg[0] == '.')
+    return;
+  static std::unordered_map<std::string, int> pathList;
+  auto pathListPair = pathList.insert({arg, 0});
+  if (pathListPair.second) {
+    if (!std::filesystem::exists(std::filesystem::path(arg))) {
+      LOG_S(ERROR) << "Path does not exist: " << arg;
+    }
+  }
+}
 } // namespace
 
 void Project::loadDirectory(const std::string &root, Project::Folder &folder) {
@@ -441,13 +457,21 @@ void Project::loadDirectory(const std::string &root, Project::Folder &folder) {
       normalizeFolder(entry.filename);
       doPathMapping(entry.filename);
 
+      checkPath(entry.root);
+      checkPath(entry.directory);
+      checkPath(entry.filename);
+
       std::vector<std::string> args = std::move(cmd.CommandLine);
       entry.args.reserve(args.size());
-      for (int i = 0; i < args.size(); i++) {
+      entry.args.push_back(intern(args[0])); // First is skipped
+
+      for (int i = 1; i < args.size() - 1; i++) {
         doPathMapping(args[i]);
         if (!proc.excludesArg(args[i], i))
           entry.args.push_back(intern(args[i]));
       }
+
+      entry.args.push_back(intern(entry.filename));
       entry.compdb_size = entry.args.size();
       proc.getSearchDirs(entry);
       if (seen.insert(entry.filename).second)
@@ -570,6 +594,7 @@ Project::Entry Project::findEntry(const std::string &path, bool can_redirect,
       ret.root = best->root;
       ret.directory = best->directory;
       ret.args = best->args;
+      ret.compdb_size = best->compdb_size;
       if (best->compdb_size) // delete trailing .ccls options if exist
         ret.args.resize(best->compdb_size);
       else
