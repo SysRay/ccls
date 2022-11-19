@@ -194,7 +194,28 @@ void filterCandidates(CompletionList &result, const std::string &complete_text,
                                  return item.score_ <= FuzzyMatcher::kMinScore;
                                }),
                 items.end());
+  }else {
+    // Add Snippets and overrides
+    for (CompletionItem &item : items) {
+        const std::string &filter =
+            item.filterText.size() ? item.filterText : item.label;
+
+        switch (item.kind) {
+        case ccls::CompletionItemKind::Snippet:
+            if (filter.find("override", 2) != std::string::npos) {
+            item.score_ = 100;
+            } else {
+            item.score_ = 90;
+            }
+
+            break;
+        default:
+            item.score_ = 0;
+            break;
+        }
+    }
   }
+
   std::sort(items.begin(), items.end(),
             [](const CompletionItem &lhs, const CompletionItem &rhs) {
               int t = int(lhs.additionalTextEdits.size() -
