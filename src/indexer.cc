@@ -28,6 +28,14 @@
 
 using namespace clang;
 
+#if LLVM_VERSION_MAJOR >= 18 // llvmorg-18-init-10631-gedd690b02e16
+#define TTK_Class TagTypeKind::Class
+#define TTK_Enum TagTypeKind::Enum
+#define TTK_Interface TagTypeKind::Interface
+#define TTK_Struct TagTypeKind::Struct
+#define TTK_Union TagTypeKind::Union
+#endif
+
 namespace ccls {
 namespace {
 
@@ -1097,7 +1105,9 @@ public:
   void InclusionDirective(SourceLocation hashLoc, const Token &tok,
                           StringRef included, bool isAngled,
                           CharSourceRange filenameRange,
-#if LLVM_VERSION_MAJOR >= 15 // llvmorg-15-init-7692-gd79ad2f1dbc2
+#if LLVM_VERSION_MAJOR >= 16 // llvmorg-16-init-15080-g854c10f8d185
+                          OptionalFileEntryRef fileRef,
+#elif LLVM_VERSION_MAJOR >= 15 // llvmorg-15-init-7692-gd79ad2f1dbc2
                           llvm::Optional<FileEntryRef> fileRef,
 #else
                           const FileEntry *file,
@@ -1292,9 +1302,15 @@ index(SemaManager *manager, WorkingFiles *wfiles, VFS *vfs,
   ok = false;
   // -fparse-all-comments enables documentation in the indexer and in
   // code completion.
+#if LLVM_VERSION_MAJOR >= 18
+  ci->getLangOpts().CommentOpts.ParseAllComments =
+      g_config->index.comments > 1;
+  ci->getLangOpts().RetainCommentsFromSystemHeaders = true;
+#else
   ci->getLangOpts()->CommentOpts.ParseAllComments =
       g_config->index.comments > 1;
   ci->getLangOpts()->RetainCommentsFromSystemHeaders = true;
+#endif
   std::string buf = wfiles->getContent(main);
   std::vector<std::unique_ptr<llvm::MemoryBuffer>> bufs;
   if (buf.size())
